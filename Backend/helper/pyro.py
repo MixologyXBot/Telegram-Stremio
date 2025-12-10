@@ -114,6 +114,28 @@ def remove_urls(text):
     return cleaned_text
 
 
+def extract_filename(text):
+    if not text:
+        return None
+        
+    exts = [".mkv", ".mp4"]
+    
+    found_idx = -1
+    found_len = 0
+    
+    for ext in exts:
+        idx = text.find(ext)
+        if idx != -1:
+            if found_idx == -1 or idx < found_idx:
+                found_idx = idx
+                found_len = len(ext)
+    
+    if found_idx != -1:
+        return text[:found_idx+found_len]
+    
+    return None
+
+
 
 async def restart_notification():
     chat_id, msg_id = 0, 0
