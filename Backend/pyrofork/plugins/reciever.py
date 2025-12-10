@@ -4,7 +4,7 @@ from Backend.helper.task_manager import edit_message
 from Backend.logger import LOGGER
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls, extract_filename
+from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.helper.metadata import metadata
 from pyrogram import filters, Client
 from pyrogram.types import Message
@@ -37,12 +37,6 @@ async def file_receive_handler(client: Client, message: Message):
             if message.video or (message.document and message.document.mime_type.startswith("video/")):
                 file = message.video or message.document
                 title = message.caption or file.file_name
-
-                if message.caption:
-                    extracted = extract_filename(message.caption)
-                    if extracted:
-                        title = extracted
-
                 msg_id = message.id
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100", "")
