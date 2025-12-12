@@ -24,7 +24,7 @@ async def scrape_command(client: Client, message: Message):
         status_message = await message.reply_text("Scraping...")
 
         async with httpx.AsyncClient() as http_client:
-            for api_base in Telegram.API_URLS:
+            for api_base in Telegram.SCRAPE_API:
                 try:
                     full_url = f"{api_base}{encoded_url}"
                     response = await http_client.get(full_url, timeout=10.0)

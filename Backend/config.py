@@ -25,7 +25,7 @@ class Telegram:
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
 
-    API_URLS = [
+    _DEFAULT_SCRAPE_APIS = ",".join([
         "https://pbx1botapi.vercel.app/api/hubcloud?url=",
         "https://pbx1botapi.vercel.app/api/vcloud?url=",
         "https://pbx1botapi.vercel.app/api/hubcdn?url=",
@@ -38,4 +38,6 @@ class Telegram:
         "https://pbx1botapi.vercel.app/api/extralink?url=",
         "https://pbx1botapi.vercel.app/api/luxdrive?url=",
         "https://pbx1botapi.vercel.app/api/gdflix?url=",
-    ]
+    ])
+
+    SCRAPE_API = [api.strip() for api in (getenv("SCRAPE_API") or _DEFAULT_SCRAPE_APIS).split(",") if api.strip()]
