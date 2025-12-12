@@ -9,6 +9,7 @@ from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
+import httpx
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -112,6 +113,41 @@ def remove_urls(text):
     cleaned_text = re.sub(r'\s+', ' ', text_without_urls).strip()
     
     return cleaned_text
+
+
+async def scrape(url: str, timeout: float = 10.0) -> dict:
+    if not getattr(Telegram, "SCRAPE_API", None):
+        return {"error": "SCRAPE_API not configured"}
+
+    PLATFORMS = ["hubcloud", "vcloud", "hubcdn", "driveleech", "hubdrive", "neo", "gdrex", "pixelcdn", "extraflix", "extralink", "luxdrive", "gdflix"]
+    base = str(Telegram.SCRAPE_API).strip().rstrip("/")
+
+    async with httpx.AsyncClient() as client:
+        for platform in PLATFORMS:
+            endpoint = f"{base}/api/{platform}"
+            try:
+                resp = await client.get(endpoint, params={"url": url}, timeout=timeout)
+            except Exception as e:
+                continue
+
+            if resp.status_code != 200:
+                continue
+
+            try:
+                res_json = resp.json()
+            except:
+                res_json = None
+
+            if isinstance(res_json, dict):
+                if res_json.get("success") is True:
+                    return {"data": res_json.get("data", res_json)}
+                continue
+
+            text = resp.text or ""
+            if text.strip():
+                return {"text": text}
+
+    return {"error": "No API responded successfully"}
 
 
 
