@@ -1,56 +1,76 @@
-import json, io
-import httpx
 from pyrogram import Client, filters, enums
 from pyrogram.types import Message
-from Backend.config import Telegram
 from Backend.helper.custom_filter import CustomFilters
-from Backend.helper.pyro import scrape
+from Backend.helper.pyro import fetch_scrape_data
+from Backend.config import Telegram
 
-@Client.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
-async def scrape_command(client: Client, message: Message):
-    try:
-        parts = message.text.split(maxsplit=1)
-        if len(parts) < 2:
-            await message.reply_text("Usage: /scrape <url>")
-            return
 
-        url_to_scrape = parts[1].strip()
-        status = await message.reply_text("Scraping...")
+def build_caption(data: dict, platform: str) -> str:
+    
+    if platform == "hubcloud":
+        file_name = data.get("file_name")
+        file_size = data.get("file_size")
+        links_list = data.get("links") or []
 
-        result = await scrape(url_to_scrape)
+        caption_lines = [f"<b>{file_name}</b>"]
 
-        if "error" in result:
-            attempts = result.get("attempts", [])
-            lines = []
-            for a in attempts:
-                if "error" in a:
-                    lines.append(f"{a['endpoint']} -> EXCEPTION: {a['error']}")
-                else:
-                    line = f"{a['endpoint']} -> HTTP {a.get('status')}"
-                    if "json" in a:
-                        line += " (json returned)"
-                    if "raw_preview" in a and a["raw_preview"]:
-                        line += f" preview:{a['raw_preview'][:200]!s}"
-                    lines.append(line)
-            await status.edit_text("No result: " + result["error"] + "\n\nTried:\n" + "\n".join(lines))
-            return
+        if file_size:
+            caption_lines.append(f"\n<b>Size:</b> {file_size}")
+            
+        if links_list:
+            caption_lines.append("\n<b>Links:</b>")
+            for link in links_list:
+                link_type = link.get("type", "Server")
+                link_url = link.get("url", "")
+                caption_lines.append(
+                    f"\n• <b>{link_type}:</b> <blockquote>{link_url}</blockquote>"
+                )
+                
+        return "\n".join(caption_lines)
 
-        if "data" in result:
-            text = json.dumps(result["data"], ensure_ascii=False, indent=2)
-        elif "text" in result:
-            text = result["text"]
-        else:
-            text = json.dumps(result, ensure_ascii=False, indent=2)
+    if platform == "gdflix":
+        title = data.get("title")
+        size = data.get("size")
+        links_list = data.get("links") or []
+        
+        caption_lines = [f"<b>{title}</b>"]
+        
+        if size:
+            caption_lines.append(f"\n<b>Size:</b> {size}")
+            
+        if links_list:
+            caption_lines.append("\n<b>Links:</b>")
+            for link in links_list:
+                link_type = link.get("type", "Server")
+                link_url = link.get("url", "")
+                caption_lines.append(
+                    f"\n• <b>{link_type}:</b> <blockquote>{link_url}</blockquote>"
+                )
+                
+        return "\n".join(caption_lines)
 
-        if len(text) > 4096:
-            await status.delete()
-            await message.reply_document(
-                document=io.BytesIO(text.encode("utf-8")),
-                file_name="scrape_result.json",
-                caption="Full result sent as file."
-            )
-        else:
-            await status.edit_text(f"<pre>{text}</pre>", parse_mode=enums.ParseMode.HTML)
 
-    except Exception as e:
-        await message.reply_text(f"An error occurred: {e}")
+
+@StreamBot.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
+async def scrape_handler(bot: Client, message: Message):
+    if len(message.text.split(" ", 1)) < 2:
+        return await message.reply_text("**Usage:** /scrape URL")
+
+    url = message.text.split(" ", 1)[1].strip()
+    normalized_url = url.lower()
+
+    if "hubcloud" in normalized_url:
+        platform = "hubcloud"
+    elif "gdflix" in normalized_url or "gdlink" in normalized_url:
+        platform = "gdflix"
+    else:
+        return await message.reply_text("This URL is not supported.")
+
+    scraped_data = fetch_scrape_data(platform, url)
+
+    if "error" in scraped_data:
+        return await message.reply_text(f"Error: {scraped_data['error']}")
+
+    caption = build_caption(scraped_data, platform)
+
+    await message.reply_text(caption, parse_mode=enums.ParseMode.HTML)
