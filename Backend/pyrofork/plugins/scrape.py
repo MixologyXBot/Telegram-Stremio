@@ -2,24 +2,9 @@ import httpx
 from urllib.parse import quote
 from pyrogram import filters, Client, enums
 from Backend.helper.custom_filter import CustomFilters
+from Backend.config import Telegram
 from pyrogram.types import Message
 import io
-
-# List of APIs to try in order
-API_URLS = [
-    "https://pbx1botapi.vercel.app/api/hubcloud?url=",
-    "https://pbx1botapi.vercel.app/api/vcloud?url=",
-    "https://pbx1botapi.vercel.app/api/hubcdn?url=",
-    "https://pbx1botapi.vercel.app/api/driveleech?url=",
-    "https://pbx1botapi.vercel.app/api/hubdrive?url=",
-    "https://pbx1botapi.vercel.app/api/neo?url=",
-    "https://pbx1botapi.vercel.app/api/gdrex?url=",
-    "https://pbx1botapi.vercel.app/api/pixelcdn?url=",
-    "https://pbx1botapi.vercel.app/api/extraflix?url=",
-    "https://pbx1botapi.vercel.app/api/extralink?url=",
-    "https://pbx1botapi.vercel.app/api/luxdrive?url=",
-    "https://pbx1botapi.vercel.app/api/gdflix?url=",
-]
 
 @Client.on_message(filters.command('scrape') & filters.private & CustomFilters.owner)
 async def scrape_command(client: Client, message: Message):
@@ -39,7 +24,7 @@ async def scrape_command(client: Client, message: Message):
         status_message = await message.reply_text("Scraping...")
 
         async with httpx.AsyncClient() as http_client:
-            for api_base in API_URLS:
+            for api_base in Telegram.API_URLS:
                 try:
                     full_url = f"{api_base}{encoded_url}"
                     response = await http_client.get(full_url, timeout=10.0)

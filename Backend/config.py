@@ -24,4 +24,18 @@ class Telegram:
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
-    
+
+    API_URLS = [
+        "https://pbx1botapi.vercel.app/api/hubcloud?url=",
+        "https://pbx1botapi.vercel.app/api/vcloud?url=",
+        "https://pbx1botapi.vercel.app/api/hubcdn?url=",
+        "https://pbx1botapi.vercel.app/api/driveleech?url=",
+        "https://pbx1botapi.vercel.app/api/hubdrive?url=",
+        "https://pbx1botapi.vercel.app/api/neo?url=",
+        "https://pbx1botapi.vercel.app/api/gdrex?url=",
+        "https://pbx1botapi.vercel.app/api/pixelcdn?url=",
+        "https://pbx1botapi.vercel.app/api/extraflix?url=",
+        "https://pbx1botapi.vercel.app/api/extralink?url=",
+        "https://pbx1botapi.vercel.app/api/luxdrive?url=",
+        "https://pbx1botapi.vercel.app/api/gdflix?url=",
+    ]
