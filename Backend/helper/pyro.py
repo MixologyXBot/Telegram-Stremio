@@ -117,15 +117,37 @@ def remove_urls(text):
 
 
 def fetch_scrape_data(platform: str, url: str) -> dict:
-    try:
-        response = requests.get(f"{Telegram.SCRAPE_API}/{platform}", params={"url": url})
-        response_json = response.json()
-        if response_json.get("success"):
-            return response_json.get("data")
+    if not Telegram.SCRAPE_API:
+        return {"error": "SCRAPE_API is not configured"}
+
+    last_error = "Unknown error"
+
+    for api_base in Telegram.SCRAPE_API:
+        try:
+            api_url = f"{api_base.rstrip('/')}/api/{platform}"
+            response = requests.get(api_url, params={"url": url}, timeout=10)
+
+            try:
+                response_json = response.json()
+            except Exception:
+                # If JSON decoding fails, it might mean the endpoint or URL is wrong or server error
+                last_error = f"Invalid JSON response from {api_base}: {response.text[:100]}"
+                continue
+
+            if response_json.get("success"):
+                return response_json.get("data")
+
+            # If explicit error from API, we might want to return it or try next
+            # Usually if 'success' is false, it's a logic error (like file not found), not server error.
+            # But let's assume we return the error if it's there.
+            if "error" in response_json:
+                return {"error": response_json.get("error")}
+
+        except Exception as exception:
+            last_error = str(exception)
+            continue
             
-        return {"error": response_json.get("error")}
-    except Exception as exception:
-        return {"error": str(exception)}
+    return {"error": last_error}
 
 
 async def restart_notification():
