@@ -51,8 +51,8 @@ def build_caption(data: dict, platform: str) -> str:
 
 
 
-@StreamBot.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
-async def scrape_handler(bot: Client, message: Message):
+@Client.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
+async def scrape_command(client: Client, message: Message):
     if len(message.text.split(" ", 1)) < 2:
         return await message.reply_text("**Usage:** /scrape URL")
 
