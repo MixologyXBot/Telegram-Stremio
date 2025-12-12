@@ -118,43 +118,46 @@ def remove_urls(text):
 async def scrape(url: str, timeout: float = 10.0) -> dict:
     if not getattr(Telegram, "SCRAPE_API", None):
         return {"error": "SCRAPE_API not configured", "attempts": []}
-
+        
     PLATFORMS = ["hubcloud", "vcloud", "hubcdn", "driveleech", "hubdrive", "neo", "gdrex", "pixelcdn", "extraflix", "extralink", "luxdrive", "gdflix"]
     base = str(Telegram.SCRAPE_API).strip().rstrip("/")
     attempts = []
-
+    
     async with httpx.AsyncClient() as client:
         for platform in PLATFORMS:
             endpoint = f"{base}/api/{platform}"
-
             try:
                 resp = await client.get(endpoint, params={"url": url}, timeout=timeout)
             except Exception as e:
                 attempts.append({"endpoint": endpoint, "error": str(e)})
                 continue
-
             info = {"endpoint": endpoint, "status": resp.status_code}
             attempts.append(info)
-
             if resp.status_code != 200:
                 continue
-
             try:
                 res_json = resp.json()
             except:
                 res_json = None
-
             if isinstance(res_json, dict):
+                
                 if res_json.get("success") is True:
+                    links = res_json.get("links")
+                    if isinstance(links, list) and len(links) > 0:
+                        return {"data": res_json, "attempts": attempts}
+                        
+                    if res_json.get("link") or res_json.get("url"):
+                        return {"data": res_json, "attempts": attempts}
+                        
+                links = res_json.get("links")
+                if isinstance(links, list) and len(links) > 0:
                     return {"data": res_json, "attempts": attempts}
                 info["json"] = res_json
                 continue
-
             text = resp.text or ""
             if text.strip():
                 return {"text": text, "attempts": attempts}
-
-    return {"error": "No API responded successfully", "attempts": attempts}
+    return {"error": "No API responded with links", "attempts": attempts}
 
 
 async def restart_notification():
