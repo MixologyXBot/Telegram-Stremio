@@ -9,6 +9,7 @@ from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
+import json
 import httpx
 from pyrogram.types import BotCommand
 from pyrogram import enums
@@ -115,49 +116,63 @@ def remove_urls(text):
     return cleaned_text
 
 
-async def scrape(url: str, timeout: float = 10.0) -> dict:
+
+async def scrape(url: str, timeout: float = 12.0) -> dict:
     if not getattr(Telegram, "SCRAPE_API", None):
         return {"error": "SCRAPE_API not configured", "attempts": []}
-        
+
     PLATFORMS = ["hubcloud", "vcloud", "hubcdn", "driveleech", "hubdrive", "neo", "gdrex", "pixelcdn", "extraflix", "extralink", "luxdrive", "gdflix"]
+    DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
     base = str(Telegram.SCRAPE_API).strip().rstrip("/")
     attempts = []
-    
-    async with httpx.AsyncClient() as client:
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
         for platform in PLATFORMS:
             endpoint = f"{base}/api/{platform}"
             try:
-                resp = await client.get(endpoint, params={"url": url}, timeout=timeout)
+                resp = await client.get(endpoint, params={"url": url}, headers=DEFAULT_HEADERS)
             except Exception as e:
                 attempts.append({"endpoint": endpoint, "error": str(e)})
                 continue
-            info = {"endpoint": endpoint, "status": resp.status_code}
-            attempts.append(info)
-            if resp.status_code != 200:
-                continue
+
+            record = {"endpoint": endpoint, "status": getattr(resp, "status_code", None)}
+            attempts.append(record)
+
+            raw_text = resp.text or ""
+            record["raw_preview"] = raw_text[:1000] if raw_text else ""
+
+            res_json = None
             try:
                 res_json = resp.json()
-            except:
+            except Exception:
                 res_json = None
+
             if isinstance(res_json, dict):
                 
                 if res_json.get("success") is True:
                     links = res_json.get("links")
                     if isinstance(links, list) and len(links) > 0:
                         return {"data": res_json, "attempts": attempts}
-                        
-                    if res_json.get("link") or res_json.get("url"):
+                    
+                    if res_json.get("title") or res_json.get("size") or res_json.get("link") or res_json.get("url"):
                         return {"data": res_json, "attempts": attempts}
-                        
+                
                 links = res_json.get("links")
                 if isinstance(links, list) and len(links) > 0:
                     return {"data": res_json, "attempts": attempts}
-                info["json"] = res_json
+                record["json"] = res_json
                 continue
-            text = resp.text or ""
-            if text.strip():
-                return {"text": text, "attempts": attempts}
-    return {"error": "No API responded with links", "attempts": attempts}
+
+            if raw_text.strip():
+                try:
+                    parsed = json.loads(raw_text)
+                    if isinstance(parsed, dict):
+                        return {"data": parsed, "attempts": attempts}
+                except:
+                    pass
+                return {"text": raw_text, "attempts": attempts}
+
+    return {"error": "No API responded with usable result", "attempts": attempts}
 
 
 async def restart_notification():
