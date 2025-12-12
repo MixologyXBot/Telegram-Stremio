@@ -125,7 +125,7 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         response = requests.get(f"{scrape_api}/{platform}", params={"url": url})
         response_json = response.json()
         if response_json.get("success"):
-            return response_json.get("data")
+            return response_json.get("data", response_json)
 
         if "error" in response_json:
             return {"error": response_json.get("error")}
