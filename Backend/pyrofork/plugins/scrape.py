@@ -1,6 +1,6 @@
-import io
+import json, io
 import httpx
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 from Backend.config import Telegram
 from Backend.helper.custom_filter import CustomFilters
@@ -16,37 +16,44 @@ async def scrape_command(client: Client, message: Message):
 
         url_to_scrape = parts[1].strip()
         status = await message.reply_text("Scraping...")
-
         result = await scrape(url_to_scrape)
 
         if "error" in result:
-            await status.edit_text(f"No result: {result['error']}")
+            attempts = result.get("attempts", [])
+            if attempts:
+                lines = []
+                for a in attempts:
+                    if "error" in a:
+                        lines.append(f"{a['endpoint']} -> EXCEPTION: {a['error']}")
+                    else:
+                        line = f"{a['endpoint']} -> HTTP {a.get('status')}"
+                        if "json" in a:
+                            line += " (json returned)"
+                        lines.append(line)
+
+                await status.edit_text(
+                    "No result: " + result["error"] + "\n\nTried:\n" + "\n".join(lines)
+                )
+            else:
+                await status.edit_text("No result: " + result["error"])
             return
 
         if "data" in result:
-            import json
-            try:
-                text = json.dumps(result["data"], ensure_ascii=False, indent=2)
-            except:
-                text = str(result["data"])
+            text = json.dumps(result["data"], ensure_ascii=False, indent=2)
         elif "text" in result:
             text = result["text"]
         else:
-            text = str(result)
-
-        if not text.strip():
-            await status.edit_text("No result found.")
-            return
+            text = json.dumps(result, ensure_ascii=False, indent=2)
 
         if len(text) > 4096:
             await status.delete()
             await message.reply_document(
-                document=io.BytesIO(text.encode("utf-8")),
-                file_name="scraped_result.txt",
-                caption="Result too long, sent as file."
+                io.BytesIO(text.encode("utf-8")),
+                file_name="scrape_result.json",
+                caption="Full result sent as file."
             )
         else:
-            await status.edit_text(text)
+            await status.edit_text(f"<pre>{text}</pre>", parse_mode=enums.ParseMode.HTML)
 
     except Exception as e:
         await message.reply_text(f"An error occurred: {e}")
