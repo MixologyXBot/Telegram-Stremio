@@ -14,7 +14,7 @@ class Telegram:
 
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
-    SCRAPE_URLS = [scrape.strip() for scrape in (getenv("SCRAPE_URLS") or "").split(",") if scrape.strip()]
+    SCRAPE_API = [scrape.strip() for scrape in (getenv("SCRAPE_API") or "").split(",") if scrape.strip()]
 
     TMDB_API = getenv("TMDB_API", "")
 
