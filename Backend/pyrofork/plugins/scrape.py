@@ -16,26 +16,23 @@ async def scrape_command(client: Client, message: Message):
 
         url_to_scrape = parts[1].strip()
         status = await message.reply_text("Scraping...")
+
         result = await scrape(url_to_scrape)
 
         if "error" in result:
             attempts = result.get("attempts", [])
-            if attempts:
-                lines = []
-                for a in attempts:
-                    if "error" in a:
-                        lines.append(f"{a['endpoint']} -> EXCEPTION: {a['error']}")
-                    else:
-                        line = f"{a['endpoint']} -> HTTP {a.get('status')}"
-                        if "json" in a:
-                            line += " (json returned)"
-                        lines.append(line)
-
-                await status.edit_text(
-                    "No result: " + result["error"] + "\n\nTried:\n" + "\n".join(lines)
-                )
-            else:
-                await status.edit_text("No result: " + result["error"])
+            lines = []
+            for a in attempts:
+                if "error" in a:
+                    lines.append(f"{a['endpoint']} -> EXCEPTION: {a['error']}")
+                else:
+                    line = f"{a['endpoint']} -> HTTP {a.get('status')}"
+                    if "json" in a:
+                        line += " (json returned)"
+                    if "raw_preview" in a and a["raw_preview"]:
+                        line += f" preview:{a['raw_preview'][:200]!s}"
+                    lines.append(line)
+            await status.edit_text("No result: " + result["error"] + "\n\nTried:\n" + "\n".join(lines))
             return
 
         if "data" in result:
@@ -48,7 +45,7 @@ async def scrape_command(client: Client, message: Message):
         if len(text) > 4096:
             await status.delete()
             await message.reply_document(
-                io.BytesIO(text.encode("utf-8")),
+                document=io.BytesIO(text.encode("utf-8")),
                 file_name="scrape_result.json",
                 caption="Full result sent as file."
             )
