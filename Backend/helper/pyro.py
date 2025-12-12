@@ -126,8 +126,11 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         response_json = response.json()
         if response_json.get("success"):
             return response_json.get("data")
+
+        if "error" in response_json:
+            return {"error": response_json.get("error")}
             
-        return {"error": response_json.get("error")}
+        return response_json
     except Exception as exception:
         return {"error": str(exception)}
 
