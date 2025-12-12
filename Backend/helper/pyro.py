@@ -118,7 +118,11 @@ def remove_urls(text):
 
 def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
-        response = requests.get(f"{Telegram.SCRAPE_API}/{platform}", params={"url": url})
+        scrape_api = Telegram.SCRAPE_API
+        if not scrape_api.endswith("/api"):
+            scrape_api += "/api"
+
+        response = requests.get(f"{scrape_api}/{platform}", params={"url": url})
         response_json = response.json()
         if response_json.get("success"):
             return response_json.get("data")
