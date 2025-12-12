@@ -9,8 +9,7 @@ from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
-import json
-import httpx
+import requests
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -117,62 +116,20 @@ def remove_urls(text):
 
 
 
-async def scrape(url: str, timeout: float = 12.0) -> dict:
-    if not getattr(Telegram, "SCRAPE_API", None):
-        return {"error": "SCRAPE_API not configured", "attempts": []}
-
-    PLATFORMS = ["hubcloud", "vcloud", "hubcdn", "driveleech", "hubdrive", "neo", "gdrex", "pixelcdn", "extraflix", "extralink", "luxdrive", "gdflix"]
-    DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
-    base = str(Telegram.SCRAPE_API).strip().rstrip("/")
-    attempts = []
-
-    async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
-        for platform in PLATFORMS:
-            endpoint = f"{base}/api/{platform}"
-            try:
-                resp = await client.get(endpoint, params={"url": url}, headers=DEFAULT_HEADERS)
-            except Exception as e:
-                attempts.append({"endpoint": endpoint, "error": str(e)})
-                continue
-
-            record = {"endpoint": endpoint, "status": getattr(resp, "status_code", None)}
-            attempts.append(record)
-
-            raw_text = resp.text or ""
-            record["raw_preview"] = raw_text[:1000] if raw_text else ""
-
-            res_json = None
-            try:
-                res_json = resp.json()
-            except Exception:
-                res_json = None
-
-            if isinstance(res_json, dict):
-                
-                if res_json.get("success") is True:
-                    links = res_json.get("links")
-                    if isinstance(links, list) and len(links) > 0:
-                        return {"data": res_json, "attempts": attempts}
-                    
-                    if res_json.get("title") or res_json.get("size") or res_json.get("link") or res_json.get("url"):
-                        return {"data": res_json, "attempts": attempts}
-                
-                links = res_json.get("links")
-                if isinstance(links, list) and len(links) > 0:
-                    return {"data": res_json, "attempts": attempts}
-                record["json"] = res_json
-                continue
-
-            if raw_text.strip():
-                try:
-                    parsed = json.loads(raw_text)
-                    if isinstance(parsed, dict):
-                        return {"data": parsed, "attempts": attempts}
-                except:
-                    pass
-                return {"text": raw_text, "attempts": attempts}
-
-    return {"error": "No API responded with usable result", "attempts": attempts}
+def fetch_scrape_data(platform: str, url: str) -> dict:
+    try:
+        response = requests.get(
+            f"{Telegram.SCRAPE_API}/{platform}",
+            params={"url": url},
+            timeout=10
+        )
+        response_json = response.json()
+        if response_json.get("success"):
+            return response_json.get("data", {})
+            
+        return {"error": response_json.get("error", "Unknown scrape API error")}
+    except Exception as exception:
+        return {"error": str(exception)}
 
 
 async def restart_notification():
