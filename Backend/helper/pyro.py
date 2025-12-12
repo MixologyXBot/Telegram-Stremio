@@ -122,7 +122,9 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
 
     last_error = "Unknown error"
 
-    for api_base in Telegram.SCRAPE_API:
+    apis = Telegram.SCRAPE_API if isinstance(Telegram.SCRAPE_API, list) else [Telegram.SCRAPE_API]
+
+    for api_base in apis:
         try:
             api_url = f"{api_base.rstrip('/')}/api/{platform}"
             response = requests.get(api_url, params={"url": url}, timeout=10)
