@@ -116,46 +116,19 @@ def remove_urls(text):
 
 
 
-COMMON_HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
-
 def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
-        scrape_api = Telegram.SCRAPE_API
-        if not scrape_api.endswith("/api"):
-            scrape_api += "/api"
-
-        endpoint = f"{scrape_api}/{platform}"
-
-        response = requests.get(
-            endpoint,
-            params={"url": url},
-            headers=COMMON_HEADERS,
-            timeout=15
-        )
-
-        if not response.text or not response.text.strip():
-            return {"error": "Empty response from upstream"}
-
-        try:
-            response_json = response.json()
-        except ValueError:
-            return {
-                "error": "Non-JSON response from upstream",
-                "raw": response.text[:300]
-            }
-
-        if response_json.get("success") or response_json.get("ok"):
+        response = requests.get(f"{Telegram.SCRAPE_API}/{platform}", params={"url": url})
+        response_json = response.json()
+        if response_json.get("success"):
             return response_json.get("data", response_json)
-
+        
         if "error" in response_json:
-            return {"error": response_json["error"]}
-
+            return {"error": response_json.get("error")}
+            
         return response_json
-
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception as exception:
+        return {"error": str(exception)}
 
 
 async def restart_notification():
