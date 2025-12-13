@@ -6,7 +6,7 @@ from Backend.config import Telegram
 
 
 def build_caption(data: dict, platform: str) -> str:
-    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech"] else data.get("title")) or platform.capitalize()
+    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo"] else data.get("title")) or platform.capitalize()
     size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech"] else data.get("size"))
 
     caption_lines = [f"<b>{title}</b>"]
@@ -40,7 +40,7 @@ def build_caption(data: dict, platform: str) -> str:
 @Client.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
 async def scrape_command(client: Client, message: Message):
     if len(message.text.split(" ", 1)) < 2:
-        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, Extraflix")
+        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Extraflix, Extralink")
 
     url = message.text.split(" ", 1)[1].strip()
     normalized_url = url.lower()
@@ -57,6 +57,8 @@ async def scrape_command(client: Client, message: Message):
         platform = "driveleech"
     elif "gdrex" in normalized_url:
         platform = "gdrex"
+    elif "neolinks" in normalized_url or "nexdrive" in normalized_url:
+        platform = "neo"
     elif "extraflix" in normalized_url:
         platform = "extraflix"
     elif "extralink" in normalized_url:
