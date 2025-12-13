@@ -87,9 +87,18 @@ async def scrape_command(client: Client, message: Message):
         urls.extend(re.findall(r"https?://\S+", reply_text))
 
     if not urls:
-        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, Primevideo, Crunchyroll, BookMyShow")
-        
-    status_msg = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
+        return await message.reply_text(
+            "**Usage:** /scrape URL\n\nSupported Sites:\n"
+            "HubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, "
+            "NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, "
+            "Primevideo, Crunchyroll, BookMyShow"
+        )
+
+    status_msg = await message.reply_text(
+        "<i>Scraping... Please wait.</i>",
+        parse_mode=enums.ParseMode.HTML
+    )
+
     captions = []
 
     for url in urls:
@@ -139,19 +148,25 @@ async def scrape_command(client: Client, message: Message):
         try:
             scraped_data = fetch_scrape_data(platform, url)
 
+            # 🔍 IMPORTANT VISIBILITY LOG (added)
+            LOGGER.info(
+                "Scrape response | platform=%s | type=%s | keys=%s",
+                platform,
+                type(scraped_data).__name__,
+                list(scraped_data.keys()) if isinstance(scraped_data, dict) else None
+            )
+
             if not scraped_data:
                 LOGGER.debug(
-                    "Scrape failed | platform=%s | url=%s | reason=empty_response",
-                    platform,
-                    url
+                    "Scrape failed | platform=%s | reason=empty_response",
+                    platform
                 )
                 continue
 
             if "error" in scraped_data:
-                LOGGER.debug(
-                    "Scrape failed | platform=%s | url=%s | error=%s",
+                LOGGER.info(
+                    "Scrape failed | platform=%s | error=%s",
                     platform,
-                    url,
                     scraped_data.get("error")
                 )
                 continue
