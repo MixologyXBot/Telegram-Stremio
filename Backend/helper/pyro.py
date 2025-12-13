@@ -10,6 +10,7 @@ from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
 import requests
+from urllib.parse import quote
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -122,15 +123,23 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         if not scrape_api.endswith("/api"):
             scrape_api += "/api"
 
-        response = requests.get(f"{scrape_api}/{platform}", params={"url": url})
+        encoded_url = quote(url, safe="")
+
+        response = requests.get(
+            f"{scrape_api}/{platform}",
+            params={"url": encoded_url}
+        )
+
         response_json = response.json()
-        if response_json.get("success"):
+
+        if response_json.get("success") or response_json.get("ok"):
             return response_json.get("data", response_json)
-        
+
         if "error" in response_json:
             return {"error": response_json.get("error")}
-            
+
         return response_json
+
     except Exception as exception:
         return {"error": str(exception)}
 
