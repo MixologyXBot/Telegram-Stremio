@@ -122,15 +122,28 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         if not scrape_api.endswith("/api"):
             scrape_api += "/api"
 
-        response = requests.get(
-            f"{scrape_api}/{platform}",
-            params={"url": url}
-        )
+        # Special handling for Prime Video
+        if platform == "primevideo":
+            # Bypass the user's proxy and call the upstream directly
+            endpoint = "https://primevideo.pbx1bots.workers.dev/"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            params = {"url": url}
+        else:
+            endpoint = f"{scrape_api}/{platform}"
+            headers = {}
+            params = {"url": url}
 
+        response = requests.get(endpoint, params=params, headers=headers)
         response_json = response.json()
 
         if response_json.get("success") or response_json.get("ok"):
             return response_json.get("data", response_json)
+
+        # Handle platforms that don't return a "success" key (e.g., Prime Video, Crunchyroll)
+        if platform in ["primevideo", "crunchyroll"] and "error" not in response_json:
+            return response_json
 
         if "error" in response_json:
             return {"error": response_json.get("error")}
