@@ -1,3 +1,4 @@
+import re
 from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 from Backend.helper.custom_filter import CustomFilters
@@ -6,29 +7,26 @@ from Backend.config import Telegram
 
 
 def build_caption(data: dict, platform: str) -> str:
-    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech"] else data.get("title")) or platform.capitalize()
-    size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech"] else data.get("size"))
-    links_list = data.get("links") or []
+    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn"] else data.get("title")) or platform.capitalize()
+    size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "hubcdn"] else data.get("size"))
 
     caption_lines = [f"<b>{title}</b>"]
-
     if size:
         caption_lines.append(f"\n<b>Size:</b> {size}")
 
+    links_list = data.get("links") or []
     if links_list:
         caption_lines.append("\n<b>Links:</b>")
         for link in links_list:
-            link_type = link.get("type", "Server")
-            link_url = link.get("url", "")
+            link_type = link.get("type") or link.get("text") or "Server"
+            link_url = link.get("url") or link.get("link")
             caption_lines.append(
-                f"\n• <b>{link_type}:</b> <blockquote>{link_url}</blockquote>"
+                f"\n• <b>{link_type}:</b> <blockquote expandable>{link_url}</blockquote>"
             )
 
     if platform == "extraflix":
         results = data.get("results") or []
-
         caption_lines[0] = f"<b>Extraflix — {len(results)} result{'s' if len(results) != 1 else ''}</b>"
-
         if results:
             caption_lines.append("\n<b>Results:</b>")
             for item in results:
@@ -42,40 +40,63 @@ def build_caption(data: dict, platform: str) -> str:
 
 @Client.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
 async def scrape_command(client: Client, message: Message):
-    if len(message.text.split(" ", 1)) < 2:
-        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, Extraflix")
+    urls = []
 
-    url = message.text.split(" ", 1)[1].strip()
-    normalized_url = url.lower()
-    
-    status_msg = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
+    parts = message.text.split(" ", 1)
+    if len(parts) > 1:
+        urls.append(parts[1].strip())
 
-    if "hubcloud" in normalized_url:
-        platform = "hubcloud"
-    elif "vcloud" in normalized_url:
-        platform = "vcloud"
-    elif "hubdrive" in normalized_url:
-        platform = "hubdrive"
-    elif "driveleech" in normalized_url or "driveseed" in normalized_url:
-        platform = "driveleech"
-    elif "gdrex" in normalized_url:
-        platform = "gdrex"
-    elif "extraflix" in normalized_url:
-        platform = "extraflix"
-    elif "gdflix" in normalized_url or "gdlink" in normalized_url:
-        platform = "gdflix"
-    else:
-        return await status_msg.edit_text("This URL is not supported.")
+    if message.reply_to_message:
+        reply_text = message.reply_to_message.text or message.reply_to_message.caption or ""
+        urls.extend(re.findall(r"https?://\S+", reply_text))
 
-    try:
-        scraped_data = fetch_scrape_data(platform, url) 
-
-        if "error" in scraped_data:
-            return await status_msg.edit_text(f"Error: {scraped_data['error']}")
-
-        caption = build_caption(scraped_data, platform)
-
-        await status_msg.edit_text(caption, parse_mode=enums.ParseMode.HTML)
+    if not urls:
+        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink")
         
-    except Exception as e:
-        await status_msg.edit_text(f"An error occurred: {str(e)}")
+    status_msg = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
+    captions = []
+
+    for url in urls:
+        normalized_url = url.lower()
+
+        if "hubcloud" in normalized_url:
+            platform = "hubcloud"
+        elif "vcloud" in normalized_url:
+            platform = "vcloud"
+        elif "hubdrive" in normalized_url:
+            platform = "hubdrive"
+        elif "driveleech" in normalized_url or "driveseed" in normalized_url:
+            platform = "driveleech"
+        elif "gdrex" in normalized_url:
+            platform = "gdrex"
+        elif "neolinks" in normalized_url or "nexdrive" in normalized_url:
+            platform = "neo"
+        elif "hubcdn" in normalized_url:
+            platform = "hubcdn"
+        elif "extraflix" in normalized_url:
+            platform = "extraflix"
+        elif "extralink" in normalized_url:
+            platform = "extralink"
+        elif "gdflix" in normalized_url or "gdlink" in normalized_url:
+            platform = "gdflix"
+        else:
+            continue
+
+        try:
+            scraped_data = fetch_scrape_data(platform, url)
+            if not scraped_data or "error" in scraped_data:
+                continue
+            captions.append(build_caption(scraped_data, platform))
+        except Exception:
+            continue
+            
+    if not captions:
+        return await status_msg.edit_text("This URL is not supported.")
+    
+    split_text = "\n\n".join(captions)
+    if len(split_text) <= 4096:
+        await status_msg.edit_text(split_text, parse_mode=enums.ParseMode.HTML)
+    else:
+        await status_msg.edit_text(split_text[:4096], parse_mode=enums.ParseMode.HTML)
+        for i in range(4096, len(split_text), 4096):
+            await message.reply_text(split_text[i:i+4096], parse_mode=enums.ParseMode.HTML)
