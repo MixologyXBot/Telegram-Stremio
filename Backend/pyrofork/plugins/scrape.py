@@ -4,6 +4,7 @@ from pyrogram.types import Message
 from Backend.helper.custom_filter import CustomFilters
 from Backend.helper.pyro import fetch_scrape_data
 from Backend.config import Telegram
+from Backend.logger import LOGGER
 
 
 def build_caption(data: dict, platform: str) -> str:
@@ -123,23 +124,63 @@ async def scrape_command(client: Client, message: Message):
         elif "primevideo" in normalized_url:
             platform = "primevideo"
         else:
+            LOGGER.info(
+                "Scrape skipped | url=%s | reason=no_platform_match",
+                url
+            )
             continue
+
+        LOGGER.info(
+            "Scrape started | platform=%s | url=%s",
+            platform,
+            url
+        )
 
         try:
             scraped_data = fetch_scrape_data(platform, url)
-            if not scraped_data or "error" in scraped_data:
+
+            if not scraped_data:
+                LOGGER.debug(
+                    "Scrape failed | platform=%s | url=%s | reason=empty_response",
+                    platform,
+                    url
+                )
                 continue
+
+            if "error" in scraped_data:
+                LOGGER.debug(
+                    "Scrape failed | platform=%s | url=%s | error=%s",
+                    platform,
+                    url,
+                    scraped_data.get("error")
+                )
+                continue
+
             captions.append(build_caption(scraped_data, platform))
+
         except Exception:
+            LOGGER.exception(
+                "Scrape exception | platform=%s | url=%s",
+                platform,
+                url
+            )
             continue
-            
+
     if not captions:
+        LOGGER.info(
+            "Scrape finished | urls=%s | result=unsupported",
+            urls
+        )
         return await status_msg.edit_text("This URL is not supported.")
-    
+
     split_text = "\n\n".join(captions)
+
     if len(split_text) <= 4096:
         await status_msg.edit_text(split_text, parse_mode=enums.ParseMode.HTML)
     else:
         await status_msg.edit_text(split_text[:4096], parse_mode=enums.ParseMode.HTML)
         for i in range(4096, len(split_text), 4096):
-            await message.reply_text(split_text[i:i+4096], parse_mode=enums.ParseMode.HTML)
+            await message.reply_text(
+                split_text[i:i + 4096],
+                parse_mode=enums.ParseMode.HTML
+            )
