@@ -26,9 +26,9 @@ def build_caption(data: dict, platform: str) -> str:
                 f"<b>Source:</b> <blockquote>{source}</blockquote>"
             )
         if posters := data.get("posters"):
-            for poster in posters:
+            for i, poster in enumerate(posters, 1):
                 caption_lines.append(
-                    f"\n<b>Poster:</b> <blockquote>{poster}</blockquote>"
+                    f"\n<b>Poster {i}:</b> <blockquote>{poster}</blockquote>"
                 )
         return "\n".join(caption_lines)
         
