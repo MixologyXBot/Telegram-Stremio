@@ -118,15 +118,20 @@ def remove_urls(text):
 
 def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
-        scrape_api = Telegram.SCRAPE_API
-        if not scrape_api.endswith("/api"):
-            scrape_api += "/api"
+        if platform == "primevideo":
+            scrape_api = "https://primevideo.pbx1bots.workers.dev"
+            endpoint = ""
+        else:
+            scrape_api = Telegram.SCRAPE_API
+            if not scrape_api.endswith("/api"):
+                scrape_api += "/api"
+            endpoint = f"/{platform}"
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         }
 
-        response = requests.get(f"{scrape_api}/{platform}", params={"url": url}, headers=headers, timeout=10)
+        response = requests.get(f"{scrape_api}{endpoint}", params={"url": url}, headers=headers, timeout=10)
         response.raise_for_status()
 
         try:
