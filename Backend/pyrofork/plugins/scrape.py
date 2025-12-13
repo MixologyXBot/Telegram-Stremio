@@ -25,8 +25,8 @@ def build_caption(data: dict, platform: str) -> str:
 
         return "\n".join(caption_lines)
         
-    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn"] else data.get("title")) or platform.capitalize()
-    size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "hubcdn"] else data.get("size"))
+    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn", "nexdrive"] else data.get("title")) or platform.capitalize()
+    size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "hubcdn", "nexdrive"] else data.get("size"))
 
     caption_lines = [f"<b>{title}</b>"]
     if size:
@@ -87,7 +87,7 @@ async def scrape_command(client: Client, message: Message):
             platform = "driveleech"
         elif "gdrex" in normalized_url:
             platform = "gdrex"
-        elif "neolinks" in normalized_url or "nexdrive" in normalized_url:
+        elif "neolinks" in normalized_url:
             platform = "neo"
         elif "hubcdn" in normalized_url:
             platform = "hubcdn"
@@ -97,6 +97,8 @@ async def scrape_command(client: Client, message: Message):
             platform = "extralink"
         elif "gdflix" in normalized_url or "gdlink" in normalized_url:
             platform = "gdflix"
+        elif "nexdrive" in normalized_url:
+            platform = "nexdrive"
         elif "crunchyroll" in normalized_url:
             platform = "crunchyroll"
         else:
