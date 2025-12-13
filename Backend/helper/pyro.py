@@ -122,15 +122,30 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         if not scrape_api.endswith("/api"):
             scrape_api += "/api"
 
-        response = requests.get(f"{scrape_api}/{platform}", params={"url": url})
-        response_json = response.json()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        }
+
+        response = requests.get(f"{scrape_api}/{platform}", params={"url": url}, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        try:
+            response_json = response.json()
+        except ValueError:
+            return {"error": "Invalid JSON response from API"}
+
+        if platform in ("primevideo", "crunchyroll", "bms"):
+            return response_json
+
         if response_json.get("success"):
             return response_json.get("data", response_json)
-        
+
         if "error" in response_json:
             return {"error": response_json.get("error")}
-            
+
         return response_json
+    except requests.exceptions.RequestException as e:
+        return {"error": f"API request failed: {e}"}
     except Exception as exception:
         return {"error": str(exception)}
 
