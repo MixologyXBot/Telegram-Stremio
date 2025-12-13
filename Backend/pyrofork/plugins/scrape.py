@@ -87,18 +87,9 @@ async def scrape_command(client: Client, message: Message):
         urls.extend(re.findall(r"https?://\S+", reply_text))
 
     if not urls:
-        return await message.reply_text(
-            "**Usage:** /scrape URL\n\nSupported Sites:\n"
-            "HubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, "
-            "NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, "
-            "Primevideo, Crunchyroll, BookMyShow"
-        )
-
-    status_msg = await message.reply_text(
-        "<i>Scraping... Please wait.</i>",
-        parse_mode=enums.ParseMode.HTML
-    )
-
+        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, Primevideo, Crunchyroll, BookMyShow")
+        
+    status_msg = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
     captions = []
 
     for url in urls:
@@ -130,72 +121,26 @@ async def scrape_command(client: Client, message: Message):
             platform = "crunchyroll"
         elif "bookmyshow" in normalized_url:
             platform = "bms"
-        elif "primevideo" in normalized_url:
+        elif "primevideo" in normalized_url or "amazon" in normalized_url:
             platform = "primevideo"
         else:
-            LOGGER.info(
-                "Scrape skipped | url=%s | reason=no_platform_match",
-                url
-            )
             continue
-
-        LOGGER.info(
-            "Scrape started | platform=%s | url=%s",
-            platform,
-            url
-        )
 
         try:
             scraped_data = fetch_scrape_data(platform, url)
-
-            # 🔍 IMPORTANT VISIBILITY LOG (added)
-            LOGGER.info(
-                "Scrape response | platform=%s | type=%s | keys=%s",
-                platform,
-                type(scraped_data).__name__,
-                list(scraped_data.keys()) if isinstance(scraped_data, dict) else None
-            )
-
-            if not scraped_data:
-                LOGGER.debug(
-                    "Scrape failed | platform=%s | reason=empty_response",
-                    platform
-                )
+            if not scraped_data or "error" in scraped_data:
                 continue
-
-            if "error" in scraped_data:
-                LOGGER.info(
-                    "Scrape failed | platform=%s | error=%s",
-                    platform,
-                    scraped_data.get("error")
-                )
-                continue
-
             captions.append(build_caption(scraped_data, platform))
-
         except Exception:
-            LOGGER.exception(
-                "Scrape exception | platform=%s | url=%s",
-                platform,
-                url
-            )
             continue
-
+            
     if not captions:
-        LOGGER.info(
-            "Scrape finished | urls=%s | result=unsupported",
-            urls
-        )
         return await status_msg.edit_text("This URL is not supported.")
-
+    
     split_text = "\n\n".join(captions)
-
     if len(split_text) <= 4096:
         await status_msg.edit_text(split_text, parse_mode=enums.ParseMode.HTML)
     else:
         await status_msg.edit_text(split_text[:4096], parse_mode=enums.ParseMode.HTML)
         for i in range(4096, len(split_text), 4096):
-            await message.reply_text(
-                split_text[i:i + 4096],
-                parse_mode=enums.ParseMode.HTML
-            )
+            await message.reply_text(split_text[i:i+4096], parse_mode=enums.ParseMode.HTML)
