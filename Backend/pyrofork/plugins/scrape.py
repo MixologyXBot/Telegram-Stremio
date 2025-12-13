@@ -8,21 +8,28 @@ from Backend.config import Telegram
 
 def build_caption(data: dict, platform: str) -> str:
     if platform == "crunchyroll":
-        title = data.get("title") or "Crunchyroll"
-        landscape = data.get("landscape") or data.get("poster", "")
-        potrait = data.get("potrait") or data.get("poster", "")
-
-        caption_lines = [f"<b>{title}</b>"]
-
-        if landscape:
+        caption_lines = [f"<b>{data.get('title')}</b>"]
+        if landscape := data.get("landscape"):
             caption_lines.append(
                 f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
             )
-        if potrait:
+        if potrait := data.get("potrait"):
             caption_lines.append(
                 f"\n<b>Poster:</b> <blockquote>{potrait}</blockquote>"
             )
+        return "\n".join(caption_lines)
 
+    if platform == "bms":
+        caption_lines = []
+        if source := data.get("source"):
+            caption_lines.append(
+                f"<b>Source:</b> <blockquote>{source}</blockquote>"
+            )
+        if posters := data.get("posters"):
+            for poster in posters:
+                caption_lines.append(
+                    f"\n<b>Poster:</b> <blockquote>{poster}</blockquote>"
+                )
         return "\n".join(caption_lines)
         
     title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn", "nexdrive"] else data.get("title")) or platform.capitalize()
@@ -32,14 +39,12 @@ def build_caption(data: dict, platform: str) -> str:
     if size:
         caption_lines.append(f"\n<b>Size:</b> {size}")
 
-    links_list = data.get("links") or []
-    if links_list:
+    if data.get("links"):
         caption_lines.append("\n<b>Links:</b>")
-        for link in links_list:
-            link_type = link.get("type") or link.get("text") or "Server"
-            link_url = link.get("url") or link.get("link")
+        for link in data["links"]:
             caption_lines.append(
-                f"\n• <b>{link_type}:</b> <blockquote expandable>{link_url}</blockquote>"
+                f"\n• <b>{link.get('type') or link.get('text') or 'Server'}:</b> "
+                f"<blockquote expandable>{link.get('url') or link.get('link')}</blockquote>"
             )
 
     if platform == "extraflix":
@@ -48,9 +53,9 @@ def build_caption(data: dict, platform: str) -> str:
         if results:
             caption_lines.append("\n<b>Results:</b>")
             for item in results:
-                quality = item.get("quality")
-                url = item.get("link")
-                caption_lines.append(f"\n• <b>{quality}:</b> <blockquote>{url}</blockquote>")
+                caption_lines.append(
+                    f"\n• <b>{item.get('quality')}:</b> <blockquote>{item.get('link')}</blockquote>"
+                )
 
     return "\n".join(caption_lines)
 
@@ -69,7 +74,7 @@ async def scrape_command(client: Client, message: Message):
         urls.extend(re.findall(r"https?://\S+", reply_text))
 
     if not urls:
-        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink")
+        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, Crunchyroll, BookMyShow")
         
     status_msg = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
     captions = []
@@ -101,6 +106,8 @@ async def scrape_command(client: Client, message: Message):
             platform = "nexdrive"
         elif "crunchyroll" in normalized_url:
             platform = "crunchyroll"
+        elif "bookmyshow" in normalized_url:
+            platform = "bms"
         else:
             continue
 
