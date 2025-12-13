@@ -7,6 +7,24 @@ from Backend.config import Telegram
 
 
 def build_caption(data: dict, platform: str) -> str:
+    if platform == "crunchyroll":
+        title = data.get("title") or "Crunchyroll"
+        landscape = data.get("landscape") or data.get("poster", "")
+        potrait = data.get("potrait") or data.get("poster", "")
+
+        caption_lines = [f"<b>{title}</b>"]
+
+        if landscape:
+            caption_lines.append(
+                f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
+            )
+        if potrait:
+            caption_lines.append(
+                f"\n<b>Poster:</b> <blockquote>{potrait}</blockquote>"
+            )
+
+        return "\n".join(caption_lines)
+        
     title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn"] else data.get("title")) or platform.capitalize()
     size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "hubcdn"] else data.get("size"))
 
@@ -79,6 +97,8 @@ async def scrape_command(client: Client, message: Message):
             platform = "extralink"
         elif "gdflix" in normalized_url or "gdlink" in normalized_url:
             platform = "gdflix"
+        elif "crunchyroll" in normalized_url:
+            platform = "crunchyroll"
         else:
             continue
 
