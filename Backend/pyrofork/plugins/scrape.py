@@ -7,15 +7,15 @@ from Backend.config import Telegram
 
 
 def build_caption(data: dict, platform: str) -> str:
-    if platform == "crunchyroll":
-        caption_lines = [f"<b>{data.get('title')}</b>"]
+    if platform in ("crunchyroll", "primevideo"):
+        caption_lines = [f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>"]
         if landscape := data.get("landscape"):
             caption_lines.append(
                 f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
             )
-        if potrait := data.get("potrait"):
+        if portrait := data.get("portrait"):
             caption_lines.append(
-                f"\n<b>Poster:</b> <blockquote>{potrait}</blockquote>"
+                f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
             )
         return "\n".join(caption_lines)
 
@@ -74,7 +74,7 @@ async def scrape_command(client: Client, message: Message):
         urls.extend(re.findall(r"https?://\S+", reply_text))
 
     if not urls:
-        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, Crunchyroll, BookMyShow")
+        return await message.reply_text("**Usage:** /scrape URL\n\nSupported Sites:\nHubCloud, GDflix, VCloud, HubDrive, Driveleech, Gdrex, NeoDrive, Neolinks, Hubcdn, Extraflix, Extralink, Primevideo, Crunchyroll, BookMyShow")
         
     status_msg = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
     captions = []
@@ -108,6 +108,8 @@ async def scrape_command(client: Client, message: Message):
             platform = "crunchyroll"
         elif "bookmyshow" in normalized_url:
             platform = "bms"
+        elif "primevideo" in normalized_url:
+            platform = "primevideo"
         else:
             continue
 
