@@ -20,14 +20,12 @@ def build_caption(data: dict, platform: str) -> str:
             link_type = link.get("type") or link.get("text") or "Server"
             link_url = link.get("url") or link.get("link")
             caption_lines.append(
-                f"\n• <b>{link_type}:</b> <blockquote>{link_url}</blockquote>"
+                f"\n• <b>{link_type}:</b> <blockquote expandable>{link_url}</blockquote>"
             )
 
     if platform == "extraflix":
         results = data.get("results") or []
-
         caption_lines[0] = f"<b>Extraflix — {len(results)} result{'s' if len(results) != 1 else ''}</b>"
-
         if results:
             caption_lines.append("\n<b>Results:</b>")
             for item in results:
