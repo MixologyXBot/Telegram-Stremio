@@ -13,20 +13,12 @@ def build_caption(data: dict, platform: str) -> str:
     if size:
         caption_lines.append(f"\n<b>Size:</b> {size}")
 
-    if platform in ["extralink"]:
-        links_list = [
-            {"type": item.get("text"), "url": item.get("link")}
-            for item in data.get("links", [])
-            if item.get("link")
-        ]
-    else:
-        links_list = data.get("links") or []
-        
+    links_list = data.get("links") or []
     if links_list:
         caption_lines.append("\n<b>Links:</b>")
         for link in links_list:
-            link_type = link.get("type", "Server")
-            link_url = link.get("url", "")
+            link_type = link.get("type") or link.get("text") or "Server"
+            link_url = link.get("url") or link.get("link")
             caption_lines.append(
                 f"\n• <b>{link_type}:</b> <blockquote>{link_url}</blockquote>"
             )
