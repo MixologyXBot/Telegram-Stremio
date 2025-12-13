@@ -8,7 +8,15 @@ from Backend.config import Telegram
 def build_caption(data: dict, platform: str) -> str:
     title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech"] else data.get("title")) or platform.capitalize()
     size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech"] else data.get("size"))
-    links_list = data.get("links") or []
+    
+    if platform in ["extralink"]:
+        links_list = [
+            {"type": item.get("text"), "url": item.get("link")}
+            for item in data.get("links", [])
+            if item.get("link")
+        ]
+    else:
+        links_list = data.get("links") or []
 
     caption_lines = [f"<b>{title}</b>"]
 
@@ -62,6 +70,8 @@ async def scrape_command(client: Client, message: Message):
         platform = "gdrex"
     elif "extraflix" in normalized_url:
         platform = "extraflix"
+    elif "extralink" in normalized_url:
+        platform = "extralink"
     elif "gdflix" in normalized_url or "gdlink" in normalized_url:
         platform = "gdflix"
     else:
