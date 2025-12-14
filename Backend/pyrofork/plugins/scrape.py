@@ -8,7 +8,7 @@ from Backend.logger import LOGGER
 
 
 def build_caption(data: dict, platform: str) -> str:
-    if platform == "crunchyroll":
+    if platform in ["crunchyroll", "primevideo"]:
         caption_lines = [f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>"]
         if landscape := data.get("landscape"):
             caption_lines.append(
@@ -18,18 +18,13 @@ def build_caption(data: dict, platform: str) -> str:
             caption_lines.append(
                 f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
             )
-        return "\n".join(caption_lines)
-
-    if platform == "primevideo":
-        caption_lines = [f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>"]
-        if landscape := data.get("landscape"):
-            caption_lines.append(
-                f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
-            )
-        if portrait := data.get("portrait"):
-            caption_lines.append(
-                f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
-            )
+        if data.get("links"):
+            caption_lines.append("\n<b>Links:</b>")
+            for link in data["links"]:
+                caption_lines.append(
+                    f"\n• <b>{link.get('type') or link.get('text') or 'Server'}:</b> "
+                    f"<blockquote expandable>{link.get('url') or link.get('link')}</blockquote>"
+                )
         return "\n".join(caption_lines)
 
     if platform == "bms":
@@ -133,6 +128,13 @@ async def scrape_command(client: Client, message: Message):
             
             if scraped_data.get("error"):
                 continue
+
+            if platform in ["crunchyroll", "primevideo"] and scraped_data.get("success"):
+                scraped_data = scraped_data.get("data", {})
+
+            if not scraped_data:
+                continue
+
             captions.append(build_caption(scraped_data, platform))
         except Exception as e:
             LOGGER.info(f"{e}")
