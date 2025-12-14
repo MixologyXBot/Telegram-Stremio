@@ -124,7 +124,10 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
             f"{Telegram.SCRAPE_API.rstrip('/')}/api/{platform}"
             f"?url={encoded_url}"
         )
-        response = requests.get(full_url, timeout=15)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(full_url, timeout=15, headers=headers)
         response.raise_for_status()
         return response.json() or {}
     except Exception as e:

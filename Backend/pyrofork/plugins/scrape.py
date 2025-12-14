@@ -123,9 +123,6 @@ async def scrape_command(client: Client, message: Message):
             platform = "bms"
         elif "primevideo" in normalized_url or "amazon" in normalized_url:
             platform = "primevideo"
-            gti_match = re.search(r"gti=([^&]+)", url)
-            if gti_match:
-                url = f"https://app.primevideo.com/detail?gti={gti_match.group(1)}"
         else:
             continue
 
