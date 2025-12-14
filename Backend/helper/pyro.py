@@ -118,16 +118,22 @@ def remove_urls(text):
 
 def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
-        response = requests.get(
-            f"{Telegram.SCRAPE_API}/api/{platform}",
-            params={"url": url},
-            timeout=15
-        )
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        }
+        if platform == "primevideo":
+            endpoint = f"https://primevideo.pbx1bots.workers.dev/scrape?url={url}"
+            response = requests.get(endpoint, headers=headers, timeout=20)
+        else:
+            endpoint = f"{Telegram.SCRAPE_API}/api/{platform}"
+            response = requests.get(endpoint, params={"url": url}, timeout=15)
+
         response.raise_for_status()
         res = response.json() or {}
+
         if isinstance(res, dict):
-            if res.get("error"):
-                return {"error": res.get("error")}
+            if error_msg := res.get("error"):
+                return {"error": error_msg}
             if res.get("success") and isinstance(res.get("data"), dict):
                 return res["data"]
         return res
