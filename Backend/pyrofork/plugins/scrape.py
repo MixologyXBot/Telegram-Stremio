@@ -129,15 +129,13 @@ async def scrape_command(client: Client, message: Message):
             continue
 
         try:
-            LOGGER.error(f"[DEBUG] platform={platform} url={url}")
             scraped_data = fetch_scrape_data(platform, url)
-            LOGGER.error(f"[DEBUG] raw scraped_data={scraped_data}")
             
             if scraped_data.get("error"):
                 continue
             captions.append(build_caption(scraped_data, platform))
         except Exception as e:
-            LOGGER.error(f"[DEBUG] exception={e}")
+            LOGGER.info(f"{e}")
             continue
             
     if not captions:
