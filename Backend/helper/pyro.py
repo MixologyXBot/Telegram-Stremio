@@ -12,6 +12,7 @@ import re
 import requests
 from pyrogram.types import BotCommand
 from pyrogram import enums
+from urllib.parse import quote
 
 
 def is_media(message):
@@ -118,15 +119,14 @@ def remove_urls(text):
 
 def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
+        encoded_url = quote(url, safe="")
         response = requests.get(
             f"{Telegram.SCRAPE_API.rstrip('/')}/api/{platform}",
-            params={"url": url},
+            params={"url": encoded_url},
             timeout=15
         )
-
         response.raise_for_status()
         return response.json() or {}
-
     except Exception as e:
         return {"error": str(e)}
 
