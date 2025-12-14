@@ -9,6 +9,7 @@ from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
+import requests
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -115,6 +116,25 @@ def remove_urls(text):
 
 
 
+def fetch_scrape_data(platform: str, url: str) -> dict:
+    try:
+        response = requests.get(
+            f"{Telegram.SCRAPE_API}/api/{platform}",
+            params={"url": url},
+            timeout=15
+        )
+        response.raise_for_status()
+        res = response.json() or {}
+        if isinstance(res, dict):
+            if res.get("error"):
+                return {"error": res.get("error")}
+            if res.get("success") and isinstance(res.get("data"), dict):
+                return res["data"]
+        return res
+    except Exception as e:
+        return {"error": str(e)}
+
+
 async def restart_notification():
     chat_id, msg_id = 0, 0
     try:
@@ -145,6 +165,7 @@ async def restart_notification():
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
+    BotCommand("scrape", "⛓️‍💥 Extract data from HubCloud, GDFlix links"),
     BotCommand("fixmetadata", "⚙️ Fix empty fields of Metadata"),
     BotCommand("log", "📄 Send the log file"),
     BotCommand("restart", "♻️ Restart the bot"),
