@@ -120,11 +120,11 @@ def remove_urls(text):
 def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
         encoded_url = quote(url, safe="")
-        response = requests.get(
-            f"{Telegram.SCRAPE_API.rstrip('/')}/api/{platform}",
-            params={"url": encoded_url},
-            timeout=15
+        full_url = (
+            f"{Telegram.SCRAPE_API.rstrip('/')}/api/{platform}"
+            f"?url={encoded_url}"
         )
+        response = requests.get(full_url, timeout=15)
         response.raise_for_status()
         return response.json() or {}
     except Exception as e:
