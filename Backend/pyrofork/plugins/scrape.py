@@ -128,7 +128,7 @@ async def scrape_command(client: Client, message: Message):
 
         try:
             scraped_data = fetch_scrape_data(platform, url)
-            if scraped_data is None or scraped_data.get("error"):
+            if scraped_data.get("error"):
                 continue
             captions.append(build_caption(scraped_data, platform))
         except Exception:
