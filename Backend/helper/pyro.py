@@ -124,7 +124,13 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
             timeout=15
         )
         response.raise_for_status()
-        return response.json() or {}
+        res = response.json() or {}
+        if isinstance(res, dict):
+            if res.get("error"):
+                return {"error": res.get("error")}
+            if res.get("success") and isinstance(res.get("data"), dict):
+                return res["data"]
+        return res
     except Exception as e:
         return {"error": str(e)}
 
