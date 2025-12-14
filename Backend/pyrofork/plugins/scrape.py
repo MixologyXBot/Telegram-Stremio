@@ -8,54 +8,44 @@ from Backend.logger import LOGGER
 
 
 def build_caption(data: dict, platform: str) -> str:
+    caption_lines = []
     if platform in {"crunchyroll", "primevideo"}:
-        caption_lines = [f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>"]
-    if landscape := data.get("landscape"):
-        caption_lines.append(
-            f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
-        )
-    if portrait := data.get("portrait"):
-        caption_lines.append(
-            f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
-        )
-    return "\n".join(caption_lines)
+        caption_lines.append(f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>")
+        if landscape := data.get("landscape"):
+            caption_lines.append(f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>")
+        if portrait := data.get("portrait"):
+            caption_lines.append(f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>")
 
-    if platform == "bms":
-        caption_lines = []
+    elif platform == "bms":
         if source := data.get("source"):
-            caption_lines.append(
-                f"<b>Source:</b> <blockquote>{source}</blockquote>"
-            )
+            caption_lines.append(f"<b>Source:</b> <blockquote>{source}</blockquote>")
         if posters := data.get("posters"):
             for i, poster in enumerate(posters, 1):
-                caption_lines.append(
-                    f"\n<b>Poster {i}:</b> <blockquote>{poster}</blockquote>"
-                )
-        return "\n".join(caption_lines)
-        
-    title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn", "nexdrive"] else data.get("title")) or platform.capitalize()
-    size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "hubcdn", "nexdrive"] else data.get("size"))
+                caption_lines.append(f"\n<b>Poster {i}:</b> <blockquote>{poster}</blockquote>")
 
-    caption_lines = [f"<b>{title}</b>"]
-    if size:
-        caption_lines.append(f"\n<b>Size:</b> {size}")
-
-    if data.get("links"):
-        caption_lines.append("\n<b>Links:</b>")
-        for link in data["links"]:
-            caption_lines.append(
-                f"\n• <b>{link.get('type') or link.get('text') or 'Server'}:</b> "
-                f"<blockquote expandable>{link.get('url') or link.get('link')}</blockquote>"
-            )
-
-    if platform == "extraflix":
+    elif platform == "extraflix":
         results = data.get("results") or []
-        caption_lines[0] = f"<b>Extraflix — {len(results)} result{'s' if len(results) != 1 else ''}</b>"
+        caption_lines.append(f"<b>Extraflix — {len(results)} result{'s' if len(results) != 1 else ''}</b>")
         if results:
             caption_lines.append("\n<b>Results:</b>")
             for item in results:
                 caption_lines.append(
                     f"\n• <b>{item.get('quality')}:</b> <blockquote>{item.get('link')}</blockquote>"
+                )
+    else:
+        title = (data.get("file_name") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "neo", "hubcdn", "nexdrive", "gdflix", "gdrex", "extralink"] else data.get("title")) or platform.capitalize()
+        size = (data.get("file_size") if platform in ["hubcloud", "vcloud", "hubdrive", "driveleech", "hubcdn", "nexdrive", "gdflix", "gdrex", "extralink"] else data.get("size"))
+
+        caption_lines.append(f"<b>{title}</b>")
+        if size:
+            caption_lines.append(f"\n<b>Size:</b> {size}")
+
+        if data.get("links"):
+            caption_lines.append("\n<b>Links:</b>")
+            for link in data["links"]:
+                caption_lines.append(
+                    f"\n• <b>{link.get('type') or link.get('text') or 'Server'}:</b> "
+                    f"<blockquote expandable>{link.get('url') or link.get('link')}</blockquote>"
                 )
 
     return "\n".join(caption_lines)
