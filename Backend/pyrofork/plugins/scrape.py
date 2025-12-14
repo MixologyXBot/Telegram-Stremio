@@ -8,29 +8,17 @@ from Backend.logger import LOGGER
 
 
 def build_caption(data: dict, platform: str) -> str:
-    if platform == "crunchyroll":
+    if platform in {"crunchyroll", "primevideo"}:
         caption_lines = [f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>"]
-        if landscape := data.get("landscape"):
-            caption_lines.append(
-                f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
-            )
-        if portrait := data.get("portrait"):
-            caption_lines.append(
-                f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
-            )
-        return "\n".join(caption_lines)
-
-    if platform == "primevideo":
-        caption_lines = [f"<b>{data.get('title')} - ({data.get('year')})</b>" if data.get("year") else f"<b>{data.get('title')}</b>"]
-        if landscape := data.get("landscape"):
-            caption_lines.append(
-                f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
-            )
-        if portrait := data.get("portrait"):
-            caption_lines.append(
-                f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
-            )
-        return "\n".join(caption_lines)
+    if landscape := data.get("landscape"):
+        caption_lines.append(
+            f"\n<b>Backdrop:</b> <blockquote>{landscape}</blockquote>"
+        )
+    if portrait := data.get("portrait"):
+        caption_lines.append(
+            f"\n<b>Portrait:</b> <blockquote>{portrait}</blockquote>"
+        )
+    return "\n".join(caption_lines)
 
     if platform == "bms":
         caption_lines = []
