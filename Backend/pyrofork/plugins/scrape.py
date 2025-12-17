@@ -61,38 +61,24 @@ def extract_data(obj, urls=None, seen=None):
     if isinstance(obj, dict):
         for v in obj.values():
             extract_data(v, urls, seen)
-
     elif isinstance(obj, list):
         for item in obj:
             extract_data(item, urls, seen)
-
     elif isinstance(obj, str):
         for url in URL_REGEX.findall(obj):
             if url not in seen:
                 seen.add(url)
                 urls.append(url)
-
     return urls
 
 
 def detect_platform(url: str) -> str | None:
     u = url.lower()
-    for key, platform in PLATFORM_MAP.items():
-        if key in u:
-            return platform
-    return None
+    return next((platform for key, platform in PLATFORM_MAP.items() if key in u), None)
 
 
 def scrape_url(url: str) -> tuple[str | None, dict | None]:
-    try:
-        parsed = urlparse(url)
-        if not parsed.scheme or not parsed.netloc:
-            return None, None
-    except Exception:
-        return None, None
-
-    platform = detect_platform(url)
-    if not platform:
+    if not (platform := detect_platform(url)):
         return None, None
 
     if platform == "primevideo" and (match := re.search(r"gti=([^&]+)", url)):
@@ -112,44 +98,33 @@ def build_caption(data: dict, platform: str) -> str:
     year = data.get("year")
     
     if not year and (rd := data.get("releaseDate")):
-        try:
-            year = rd[:4]
-            lines[0] = f"<b>{title} - ({year})</b>"
-        except Exception:
-            pass
-            
+        year = rd[:4]
+
     lines.append(f"<b>{title}{f' - ({year})' if year else ''}</b>")
 
     for key, value in data.items():
-
         if key in {"title", "year"}:
             continue
 
         if key == "results" and isinstance(value, list):
             for item in value:
+                # Iterate items to preserve original order
                 for k, v in item.items():
-
                     if k == "file_name" and v:
                         lines.append(f"\n<b>{v}</b>")
-
                     elif k == "file_size" and v:
                         lines.append(f"\n<b>Size:</b> {v}")
-
                     elif k == "quality" and v:
                         lines.append(f"\n<b>{v}</b>")
-
                     elif k == "link" and v:
-                        lines.append(f"<blockquote expandable>{v}</blockquote>")
-
+                         lines.append(f"<blockquote expandable>{v}</blockquote>")
                     elif k == "links" and isinstance(v, list):
                         lines.append("\n<b>Links:</b>")
                         for link in v:
                             tag = link.get("tag") or link.get("type") or "Link"
-                            url = link.get("url") or link.get("link")
-                            if url:
+                            if url := (link.get("url") or link.get("link")):
                                 lines.append(f"\n• <b>{tag}:</b>")
                                 lines.append(f"<blockquote expandable>{url}</blockquote>")
-
                     elif k == "_debug" and isinstance(v, dict):
                         for name, url in v.items():
                             if url:
@@ -163,8 +138,8 @@ def build_caption(data: dict, platform: str) -> str:
                     lines.append(f"<blockquote expandable>{url}</blockquote>")
 
         elif key in {"images", "source", "landscape", "backdrop", "portrait", "poster", "poster_url"} and value:
-            lines.append(f"\n<b>{key.capitalize()}:</b>")
-            lines.append(f"<blockquote expandable>{value}</blockquote>")
+             lines.append(f"\n<b>{key.capitalize()}:</b>")
+             lines.append(f"<blockquote expandable>{value}</blockquote>")
 
         elif key in {"file_size", "filesize", "size"} and value:
             lines.append(f"\n<b>Size:</b> {value}")
@@ -174,11 +149,9 @@ def build_caption(data: dict, platform: str) -> str:
                 lines.append("\n<b>Links:</b>")
                 for link in value:
                     tag = link.get("tag") or link.get("type") or "Link"
-                    url = link.get("url") or link.get("link")
-                    if url:
+                    if url := (link.get("url") or link.get("link")):
                         lines.append(f"\n• <b>{tag.capitalize()}:</b>")
                         lines.append(f"<blockquote expandable>{url}</blockquote>")
-
             elif isinstance(value, dict):
                 lines.append("\n<b>Links:</b>")
                 for name, url in value.items():
@@ -192,27 +165,24 @@ def build_caption(data: dict, platform: str) -> str:
 @Client.on_message(filters.command("scrape") & filters.private & CustomFilters.owner)
 async def scrape_command(client: Client, message: Message):
     text = ""
-    if message.text:
-        parts = message.text.split(" ", 1)
-        if len(parts) > 1:
-            text += parts[1]
+    # Use split(None, 1) to handle all whitespace (space, tab, newline)
+    parts = message.text.split(None, 1)
+    if len(parts) > 1:
+        text = parts[1]
 
     if message.reply_to_message:
-        text += message.reply_to_message.text or message.reply_to_message.caption or ""
+        text += " " + (message.reply_to_message.text or message.reply_to_message.caption or "")
 
-    urls = re.findall(r"https?://\S+", text)
+    urls = URL_REGEX.findall(text)
 
     if not urls:
-        return await message.reply_text(
-            "**Usage:** /scrape URL\n\nSupported Sites:\n"
-            + ", ".join(p.capitalize() for p in dict.fromkeys(PLATFORM_MAP.values()))
-        )
+        # Revert to original behavior: values from PLATFORM_MAP.
+        # Original: ", ".join(p.capitalize() for p in dict.fromkeys(PLATFORM_MAP.values()))
+        # This preserves insertion order of dict.
+        platforms = ", ".join(p.capitalize() for p in dict.fromkeys(PLATFORM_MAP.values()))
+        return await message.reply_text(f"**Usage:** /scrape URL\n\nSupported Sites:\n{platforms}")
 
-    status = await message.reply_text(
-        "<i>Scraping... Please wait.</i>",
-        parse_mode=enums.ParseMode.HTML,
-    )
-
+    status = await message.reply_text("<i>Scraping... Please wait.</i>", parse_mode=enums.ParseMode.HTML)
     captions = []
 
     for url in urls:
@@ -220,11 +190,7 @@ async def scrape_command(client: Client, message: Message):
             platform, data = scrape_url(url)
             if platform and data:
                 captions.append(build_caption(data, platform))
-                
-                LOGGER.info(
-                    f"[SCRAPE] extracted_urls={len(extract_data(data))} platform={platform}"
-                )
-
+                LOGGER.info(f"[SCRAPE] extracted_urls={len(extract_data(data))} platform={platform}")
         except Exception as e:
             LOGGER.error(f"[SCRAPE] error url={url} err={e}")
 
@@ -238,7 +204,4 @@ async def scrape_command(client: Client, message: Message):
     else:
         await status.edit_text(final_text[:4096], parse_mode=enums.ParseMode.HTML)
         for i in range(4096, len(final_text), 4096):
-            await message.reply_text(
-                final_text[i:i + 4096],
-                parse_mode=enums.ParseMode.HTML,
-            )
+            await message.reply_text(final_text[i:i + 4096], parse_mode=enums.ParseMode.HTML)
