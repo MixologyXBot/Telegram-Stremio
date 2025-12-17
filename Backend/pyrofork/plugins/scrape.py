@@ -10,6 +10,7 @@ from Backend.logger import LOGGER
 
 
 PLATFORM_MAP = {
+    # DDL Bypass Sites
     "hubcloud": "hubcloud",
     "vcloud": "vcloud",
     "hubdrive": "hubdrive",
@@ -29,6 +30,7 @@ PLATFORM_MAP = {
     "gdlink": "gdflix",
     "nexdrive": "nexdrive",
 
+    # OTT & Streaming Platforms
     "netflix": "netflix", "nf": "netflix",
     "prime": "primevideo", "pv": "primevideo",
     "appletv": "appletv", "atv": "appletv",
@@ -45,6 +47,41 @@ PLATFORM_MAP = {
     "adda": "addatimes", "ad": "addatimes",
     "stage": "stage", "stg": "stage",
     "mxplayer": "mxplayer", "mx": "mxplayer",
+}
+
+DISPLAY_NAME = {
+    # DDL sites
+    "hubcloud": "HubCloud",
+    "vcloud": "VCloud",
+    "hubdrive": "HubDrive",
+    "driveleech": "DriveLeech",
+    "gdrex": "GDRex",
+    "neo": "NeoLinks",
+    "pixelcdn": "PixelCDN",
+    "hubcdn": "HubCDN",
+    "vega": "Vegamovies",
+    "extraflix": "ExtraFlix",
+    "extralink": "ExtraLink",
+    "gdflix": "GDFlix",
+    "nexdrive": "NexDrive",
+
+    # OTT & Streaming Platforms
+    "netflix": "Netflix",
+    "primevideo": "Prime Video",
+    "appletv": "Apple TV+",
+    "zee5": "ZEE5",
+    "crunchyroll": "Crunchyroll",
+    "airtelxstream": "Airtel Xstream",
+    "sunnxt": "Sun NXT",
+    "ahavideo": "Aha",
+    "iqiyi": "iQIYI",
+    "wetv": "WeTV",
+    "shemaroo": "ShemarooMe",
+    "bookmyshow": "BookMyShow",
+    "plextv": "Plex",
+    "addatimes": "AddaTimes",
+    "stage": "STAGE",
+    "mxplayer": "MX Player",
 }
 
 
@@ -76,7 +113,11 @@ def scrape_url(url: str):
 def build_caption(data: dict, platform: str) -> str:
     lines = []
 
-    title = data.get("title") or data.get("file_name") or platform.capitalize()
+    title = (
+        data.get("title")
+        or data.get("file_name")
+        or DISPLAY_NAME.get(platform, platform.capitalize())
+    )
     year = data.get("year")
 
     if not year and data.get("releaseDate"):
@@ -161,7 +202,9 @@ async def scrape_command(client: Client, message: Message):
     if not urls:
         return await message.reply_text(
             "**Usage:** /scrape URL\n\nSupported Sites:\n"
-            + ", ".join(dict.fromkeys(PLATFORM_MAP.values()))
+            + ", ".join(
+                DISPLAY_NAME.get(p, p.capitalize())
+                for p in dict.fromkeys(PLATFORM_MAP.values()))
         )
 
     status = await message.reply_text(
