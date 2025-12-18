@@ -3,8 +3,10 @@ from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
 from Backend import db, __version__
+from Backend.providers.fourkhdhub import get_streams as get_external_streams
 import PTN
 from datetime import datetime, timezone, timedelta
+import asyncio
 
 
 # --- Configuration ---
@@ -290,23 +292,34 @@ async def get_streams(media_type: str, id: str):
         episode_number=episode_num
     )
 
-    if not media_details or "telegram" not in media_details:
-        return {"streams": []}
-
     streams = []
-    for quality in media_details.get("telegram", []):
-        if quality.get("id"):
-            filename = quality.get('name', '')
-            quality_str = quality.get('quality', 'HD')
-            size = quality.get('size', '')
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+    # fetch external streams
+    external_streams_task = asyncio.create_task(
+        get_external_streams(tmdb_id, media_type, season_num, episode_num)
+    )
 
-            streams.append({
-                "name": stream_name,
-                "title": stream_title,
-                "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
-            })
+    if media_details and "telegram" in media_details:
+        for quality in media_details.get("telegram", []):
+            if quality.get("id"):
+                filename = quality.get('name', '')
+                quality_str = quality.get('quality', 'HD')
+                size = quality.get('size', '')
+
+                stream_name, stream_title = format_stream_details(filename, quality_str, size)
+
+                streams.append({
+                    "name": stream_name,
+                    "title": stream_title,
+                    "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                })
+
+    # Wait for external streams and merge
+    try:
+        external_streams = await external_streams_task
+        streams.extend(external_streams)
+    except Exception as e:
+        print(f"Error fetching external streams: {e}")
 
     streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)
     return {"streams": streams}

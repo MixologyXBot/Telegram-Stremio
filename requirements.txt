@@ -1,6 +1,8 @@
 aiofiles
+beautifulsoup4
 fastapi
 httpx
+lxml
 motor
 parse-torrent-title
 pyrofork
