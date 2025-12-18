@@ -5,6 +5,7 @@ from Backend.config import Telegram
 from Backend import db, __version__
 import PTN
 from datetime import datetime, timezone, timedelta
+from Backend.providers.fourkhdhub import get_streams as get_4khdhub_streams
 
 
 # --- Configuration ---
@@ -283,6 +284,9 @@ async def get_streams(media_type: str, id: str):
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid Stremio ID format")
 
+    streams = []
+
+    # 1. Fetch from Local Database
     media_details = await db.get_media_details(
         tmdb_id=tmdb_id,
         db_index=db_index,
@@ -290,23 +294,27 @@ async def get_streams(media_type: str, id: str):
         episode_number=episode_num
     )
 
-    if not media_details or "telegram" not in media_details:
-        return {"streams": []}
+    if media_details and "telegram" in media_details:
+        for quality in media_details.get("telegram", []):
+            if quality.get("id"):
+                filename = quality.get('name', '')
+                quality_str = quality.get('quality', 'HD')
+                size = quality.get('size', '')
 
-    streams = []
-    for quality in media_details.get("telegram", []):
-        if quality.get("id"):
-            filename = quality.get('name', '')
-            quality_str = quality.get('quality', 'HD')
-            size = quality.get('size', '')
+                stream_name, stream_title = format_stream_details(filename, quality_str, size)
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+                streams.append({
+                    "name": stream_name,
+                    "title": stream_title,
+                    "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                })
 
-            streams.append({
-                "name": stream_name,
-                "title": stream_title,
-                "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
-            })
+    # 2. Fetch from 4KHDHub
+    try:
+        external_streams = await get_4khdhub_streams(tmdb_id, media_type, season_num, episode_num)
+        streams.extend(external_streams)
+    except Exception as e:
+        pass  # Log error if needed
 
     streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)
     return {"streams": streams}
