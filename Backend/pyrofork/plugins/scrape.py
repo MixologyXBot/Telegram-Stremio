@@ -5,8 +5,11 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 
 from Backend.helper.custom_filter import CustomFilters
-from Backend.helper.pyro import fetch_scrape_data
+from Backend.helper.pyro import fetch_scrape_data, extract_stream_metadata
 from Backend.logger import LOGGER
+from Backend.helper.metadata import get_tmdb_from_text
+from Backend import db
+import asyncio
 
 
 PLATFORM_MAP = {
@@ -85,7 +88,7 @@ DISPLAY_NAME = {
 }
 
 
-def scrape_url(url: str):
+async def scrape_url(url: str):
     try:
         parsed = urlparse(url)
         if not parsed.scheme or not parsed.netloc:
@@ -103,7 +106,7 @@ def scrape_url(url: str):
         if m:
             url = f"https://app.primevideo.com/detail?gti={m.group(1)}"
 
-    data = fetch_scrape_data(platform, url)
+    data = await fetch_scrape_data(platform, url)
     if not isinstance(data, dict) or data.get("error"):
         return platform, None
 
@@ -216,10 +219,28 @@ async def scrape_command(client: Client, message: Message):
 
     for url in urls:
         try:
-            platform, data = scrape_url(url)
+            platform, data = await scrape_url(url)
             if platform and data:
                 captions.append(build_caption(data, platform))
                 LOGGER.info(f"[SCRAPE] platform={platform}")
+
+                # Auto-save logic integrated here to avoid re-scraping
+                streams = extract_stream_metadata(data)
+                saved_count = 0
+                for stream in streams:
+                    file_name = stream.get("file_name")
+                    metadata = await get_tmdb_from_text(file_name)
+                    if metadata:
+                         await db.add_stream_provider_link(
+                             metadata_info=metadata,
+                             url=stream.get("link"),
+                             size=stream.get("file_size"),
+                             name=file_name
+                         )
+                         saved_count += 1
+                if saved_count > 0:
+                     captions.append(f"<b>✅ Auto-saved {saved_count} streams!</b>")
+
         except Exception as e:
             LOGGER.error(f"[SCRAPE] url={url} err={e}")
 

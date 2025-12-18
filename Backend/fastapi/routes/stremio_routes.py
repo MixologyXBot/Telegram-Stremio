@@ -3,6 +3,7 @@ from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
 from Backend import db, __version__
+from Backend.helper.encrypt import encode_string
 import PTN
 from datetime import datetime, timezone, timedelta
 
@@ -290,23 +291,44 @@ async def get_streams(media_type: str, id: str):
         episode_number=episode_num
     )
 
-    if not media_details or "telegram" not in media_details:
+    if not media_details:
         return {"streams": []}
 
     streams = []
-    for quality in media_details.get("telegram", []):
-        if quality.get("id"):
-            filename = quality.get('name', '')
-            quality_str = quality.get('quality', 'HD')
-            size = quality.get('size', '')
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+    # Handle stream_providers (External/Proxy)
+    if media_details.get("stream_providers"):
+        for provider in media_details.get("stream_providers", []):
+            if provider.get("id"):
+                url = provider.get("id")
+                encoded_url = await encode_string({"url": url})
+                filename = provider.get("name", "Unknown")
+                size = provider.get("size", "")
+                quality_str = provider.get("quality", "")
 
-            streams.append({
-                "name": stream_name,
-                "title": stream_title,
-                "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
-            })
+                stream_title = f"📁 {filename}\n💾 {size}"
+
+                streams.append({
+                    "name": f"[External] {quality_str}",
+                    "title": stream_title,
+                    "url": f"{BASE_URL}/proxy/{encoded_url}/{filename}"
+                })
+
+    # Handle Telegram files
+    if media_details.get("telegram"):
+        for quality in media_details.get("telegram", []):
+            if quality.get("id"):
+                filename = quality.get('name', '')
+                quality_str = quality.get('quality', 'HD')
+                size = quality.get('size', '')
+
+                stream_name, stream_title = format_stream_details(filename, quality_str, size)
+
+                streams.append({
+                    "name": stream_name,
+                    "title": stream_title,
+                    "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                })
 
     streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)
     return {"streams": streams}

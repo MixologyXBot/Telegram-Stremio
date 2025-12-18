@@ -174,6 +174,68 @@ class Database:
     # Multi Database Method for insert/update/delete/list
     # -------------------------------
 
+    async def add_stream_provider_link(
+        self, metadata_info: dict, url: str, size: str, name: str
+    ) -> Optional[ObjectId]:
+
+        quality_detail = QualityDetail(
+            quality=metadata_info.get('quality', 'Unknown'),
+            id=url,
+            name=name,
+            size=size
+        )
+
+        if metadata_info['media_type'] == "movie":
+            media = MovieSchema(
+                tmdb_id=metadata_info['tmdb_id'],
+                imdb_id=metadata_info['imdb_id'],
+                db_index=self.current_db_index,
+                title=metadata_info['title'],
+                genres=metadata_info['genres'],
+                description=metadata_info['description'],
+                rating=metadata_info['rate'],
+                release_year=metadata_info['year'],
+                poster=metadata_info['poster'],
+                backdrop=metadata_info['backdrop'],
+                logo=metadata_info['logo'],
+                cast=metadata_info['cast'],
+                runtime=metadata_info['runtime'],
+                media_type=metadata_info['media_type'],
+                telegram=[],
+                stream_providers=[quality_detail]
+            )
+            return await self.update_movie(media)
+        else:
+            tv_show = TVShowSchema(
+                tmdb_id=metadata_info['tmdb_id'],
+                imdb_id=metadata_info['imdb_id'],
+                db_index=self.current_db_index,
+                title=metadata_info['title'],
+                genres=metadata_info['genres'],
+                description=metadata_info['description'],
+                rating=metadata_info['rate'],
+                release_year=metadata_info['year'],
+                poster=metadata_info['poster'],
+                backdrop=metadata_info['backdrop'],
+                logo=metadata_info['logo'],
+                cast=metadata_info['cast'],
+                runtime=metadata_info['runtime'],
+                media_type=metadata_info['media_type'],
+                seasons=[Season(
+                    season_number=metadata_info['season_number'],
+                    episodes=[Episode(
+                        episode_number=metadata_info['episode_number'],
+                        title=metadata_info['episode_title'],
+                        episode_backdrop=metadata_info['episode_backdrop'],
+                        overview=metadata_info['episode_overview'],
+                        released=metadata_info['episode_released'],
+                        telegram=[],
+                        stream_providers=[quality_detail]
+                    )]
+                )]
+            )
+            return await self.update_tv_show(tv_show)
+
     async def insert_media(
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str
@@ -294,33 +356,49 @@ class Database:
 
         # ---------------- UPDATE MOVIE ----------------
         movie_id = existing_movie["_id"]
-        existing_qualities = existing_movie.get("telegram", [])
 
-        if Telegram.REPLACE_MODE:
-            # delete all same-quality entries
-            to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
+        # Handle stream_providers update if present in movie_data
+        new_providers = movie_data.stream_providers
+        if new_providers:
+            existing_providers = existing_movie.get("stream_providers") or []
+            # For providers, we just append or replace if same URL
+            new_prov = new_providers[0]
+            existing_providers = [p for p in existing_providers if p.get("id") != new_prov.id]
+            existing_providers.append(new_prov.dict())
+            existing_movie["stream_providers"] = existing_providers
 
-            for q in to_delete:
-                try:
-                    old_id = q.get("id")
-                    if old_id:
-                        decoded = await decode_string(old_id)
-                        chat_id = int(f"-100{decoded['chat_id']}")
-                        msg_id = int(decoded['msg_id'])
-                        create_task(delete_message(chat_id, msg_id))
-                except Exception as e:
-                    LOGGER.error(f"Failed to delete old quality: {e}")
+        # Handle telegram update if present
+        if movie_data.telegram:
+            existing_qualities = existing_movie.get("telegram", [])
+            quality_to_update = movie_data.telegram[0]
+            target_quality = quality_to_update.quality
 
-            existing_qualities = [
-                q for q in existing_qualities if q.get("quality") != target_quality
-            ]
-            existing_qualities.append(quality_to_update)
+            if Telegram.REPLACE_MODE:
+                # delete all same-quality entries
+                to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
 
-        else:
-            # allow duplicate qualities
-            existing_qualities.append(quality_to_update)
+                for q in to_delete:
+                    try:
+                        old_id = q.get("id")
+                        if old_id:
+                            decoded = await decode_string(old_id)
+                            chat_id = int(f"-100{decoded['chat_id']}")
+                            msg_id = int(decoded['msg_id'])
+                            create_task(delete_message(chat_id, msg_id))
+                    except Exception as e:
+                        LOGGER.error(f"Failed to delete old quality: {e}")
 
-        existing_movie["telegram"] = existing_qualities
+                existing_qualities = [
+                    q for q in existing_qualities if q.get("quality") != target_quality
+                ]
+                existing_qualities.append(quality_to_update)
+
+            else:
+                # allow duplicate qualities
+                existing_qualities.append(quality_to_update)
+
+            existing_movie["telegram"] = existing_qualities
+
         existing_movie["updated_on"] = datetime.utcnow()
 
         if existing_db_index != self.current_db_index:
@@ -416,36 +494,45 @@ class Database:
                     existing_season["episodes"].append(episode)
                     continue
 
-                existing_episode.setdefault("telegram", [])
+                # Handle stream_providers
+                if episode.get("stream_providers"):
+                    existing_episode.setdefault("stream_providers", [])
+                    new_prov = episode["stream_providers"][0]
+                    existing_providers = [p for p in existing_episode["stream_providers"] if p.get("id") != new_prov.get("id")]
+                    existing_providers.append(new_prov.dict())
+                    existing_episode["stream_providers"] = existing_providers
 
-                for quality in episode["telegram"]:
-                    target_quality = quality.get("quality")
+                if episode.get("telegram"):
+                    existing_episode.setdefault("telegram", [])
 
-                    if Telegram.REPLACE_MODE:
-                        to_delete = [
-                            q for q in existing_episode["telegram"]
-                            if q.get("quality") == target_quality
-                        ]
+                    for quality in episode["telegram"]:
+                        target_quality = quality.get("quality")
 
-                        for q in to_delete:
-                            try:
-                                old_id = q.get("id")
-                                if old_id:
-                                    decoded = await decode_string(old_id)
-                                    chat_id = int(f"-100{decoded['chat_id']}")
-                                    msg_id = int(decoded['msg_id'])
-                                    create_task(delete_message(chat_id, msg_id))
-                            except Exception as e:
-                                LOGGER.error(f"Failed to delete old quality: {e}")
+                        if Telegram.REPLACE_MODE:
+                            to_delete = [
+                                q for q in existing_episode["telegram"]
+                                if q.get("quality") == target_quality
+                            ]
 
-                        existing_episode["telegram"] = [
-                            q for q in existing_episode["telegram"]
-                            if q.get("quality") != target_quality
-                        ]
-                        existing_episode["telegram"].append(quality)
+                            for q in to_delete:
+                                try:
+                                    old_id = q.get("id")
+                                    if old_id:
+                                        decoded = await decode_string(old_id)
+                                        chat_id = int(f"-100{decoded['chat_id']}")
+                                        msg_id = int(decoded['msg_id'])
+                                        create_task(delete_message(chat_id, msg_id))
+                                except Exception as e:
+                                    LOGGER.error(f"Failed to delete old quality: {e}")
 
-                    else:
-                        existing_episode["telegram"].append(quality)
+                            existing_episode["telegram"] = [
+                                q for q in existing_episode["telegram"]
+                                if q.get("quality") != target_quality
+                            ]
+                            existing_episode["telegram"].append(quality)
+
+                        else:
+                            existing_episode["telegram"].append(quality)
 
         existing_tv["updated_on"] = datetime.utcnow()
 

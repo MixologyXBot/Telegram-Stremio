@@ -10,6 +10,7 @@ from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
 import requests
+import httpx
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -116,23 +117,86 @@ def remove_urls(text):
 
 
 
-def fetch_scrape_data(platform: str, url: str) -> dict:
+async def fetch_scrape_data(platform: str, url: str) -> dict:
     try:
-        response = requests.get(
-            f"{Telegram.SCRAPE_API}/api/{platform}",
-            params={"url": url},
-            timeout=15
-        )
-        response.raise_for_status()
-        res = response.json() or {}
-        if isinstance(res, dict):
-            if res.get("error"):
-                return {"error": res.get("error")}
-            if res.get("success") and isinstance(res.get("data"), dict):
-                return res["data"]
-        return res
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                f"{Telegram.SCRAPE_API}/api/{platform}",
+                params={"url": url}
+            )
+            response.raise_for_status()
+            res = response.json() or {}
+            if isinstance(res, dict):
+                if res.get("error"):
+                    return {"error": res.get("error")}
+                if res.get("success") and isinstance(res.get("data"), dict):
+                    return res["data"]
+            return res
     except Exception as e:
         return {"error": str(e)}
+
+
+def extract_stream_metadata(data: dict) -> list[dict]:
+    """
+    Extracts file name, size, and stream link from scraped data.
+    """
+    streams = []
+
+    def _extract(item):
+        link = item.get("link")
+        if not link and isinstance(item.get("links"), list):
+             for l in item["links"]:
+                 if l.get("url"):
+                     link = l.get("url")
+                     break
+
+        if link:
+            streams.append({
+                "file_name": item.get("file_name") or item.get("title") or "Unknown",
+                "file_size": item.get("file_size") or item.get("size") or "0B",
+                "link": link,
+                "quality": item.get("quality") or "Unknown"
+            })
+
+    if isinstance(data.get("results"), list):
+        for result in data["results"]:
+            _extract(result)
+
+            # Recursive check for debug links or other structures if needed
+            if isinstance(result.get("_debug"), dict):
+                for name, url in result["_debug"].items():
+                    if url:
+                         streams.append({
+                            "file_name": f"{result.get('file_name', 'Unknown')} - {name}",
+                            "file_size": result.get("file_size", "0B"),
+                            "link": url,
+                            "quality": "Unknown"
+                        })
+
+    # Check top-level links if no results found or complementary
+    if not streams:
+        links = data.get("links")
+        if isinstance(links, list):
+             for link in links:
+                url = link.get("url") or link.get("link")
+                if url:
+                     streams.append({
+                        "file_name": data.get("title") or data.get("file_name") or "Unknown",
+                        "file_size": data.get("file_size") or "0B",
+                        "link": url,
+                        "quality": link.get("quality") or "Unknown"
+                    })
+        elif isinstance(links, dict):
+            for name, url in links.items():
+                if url:
+                    streams.append({
+                        "file_name": f"{data.get('title', 'Unknown')} - {name}",
+                        "file_size": data.get("file_size") or "0B",
+                        "link": url,
+                        "quality": "Unknown"
+                    })
+
+    return streams
 
 
 async def restart_notification():

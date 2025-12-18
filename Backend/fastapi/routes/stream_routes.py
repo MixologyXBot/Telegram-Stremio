@@ -1,6 +1,7 @@
 import math
 import secrets
 import mimetypes
+import httpx
 from typing import Tuple
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
@@ -53,6 +54,79 @@ async def stream_handler(request: Request, id: str, name: str):
         id=int(decoded_data["msg_id"]),
         secure_hash=file_hash
     )
+
+
+@router.get("/proxy/{encoded_url}/{name}")
+@router.head("/proxy/{encoded_url}/{name}")
+async def proxy_handler(request: Request, encoded_url: str, name: str):
+    try:
+        data = await decode_string(encoded_url)
+        target_url = data.get("url")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    if not target_url:
+        raise HTTPException(status_code=400, detail="Missing URL")
+
+    return await proxy_streamer(request, target_url, name)
+
+
+async def proxy_streamer(request: Request, url: str, name: str) -> StreamingResponse:
+    client = httpx.AsyncClient(follow_redirects=True, timeout=10.0)
+
+    headers = {"User-Agent": "Mozilla/5.0"}
+    range_header = request.headers.get("Range")
+    if range_header:
+        headers["Range"] = range_header
+
+    try:
+        # Check headers first
+        head_resp = await client.head(url, headers=headers)
+        if head_resp.status_code >= 400:
+             # Fallback to get if head fails
+             pass
+
+        content_length = head_resp.headers.get("content-length")
+        content_type = head_resp.headers.get("content-type") or mimetypes.guess_type(name)[0] or "application/octet-stream"
+
+        accept_ranges = head_resp.headers.get("accept-ranges", "none")
+
+        async def iter_stream():
+            try:
+                async with client.stream("GET", url, headers=headers) as response:
+                    if response.status_code >= 400:
+                        raise HTTPException(status_code=response.status_code, detail="Upstream error")
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+            finally:
+                await client.aclose()
+
+        response_headers = {
+            "Content-Type": content_type,
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+            "Accept-Ranges": accept_ranges,
+             "Content-Disposition": f'inline; filename="{name}"',
+        }
+
+        status_code = 200
+        if range_header and head_resp.status_code == 206:
+            status_code = 206
+            response_headers["Content-Range"] = head_resp.headers.get("Content-Range", "")
+            if content_length:
+                 response_headers["Content-Length"] = content_length
+        elif content_length:
+             response_headers["Content-Length"] = content_length
+
+        return StreamingResponse(
+            iter_stream(),
+            status_code=status_code,
+            headers=response_headers,
+            media_type=content_type
+        )
+    except Exception as e:
+        await client.aclose()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def media_streamer(
