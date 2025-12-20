@@ -211,9 +211,12 @@ async def scrape_command(client: Client, message: Message):
 
     for url in urls:
         try:
-            platform, data = scrape_url(url)
-            if platform and data:
+            #platform, data = scrape_url(url)
+            #if platform and data:
+                #captions.append(build_caption(data, platform))
+            if platform and data is not None:
                 captions.append(build_caption(data, platform))
+                
                 LOGGER.info(f"[SCRAPE] platform={platform}")
         except Exception as e:
             LOGGER.error(f"[SCRAPE] url={url} err={e}")
