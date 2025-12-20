@@ -167,6 +167,17 @@ def build_caption(data: dict, platform: str) -> str:
             lines.append(value)
             rendered_urls.add(value)
 
+    for key, value in data.items():
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    url = item.get("url") or item.get("link")
+                    if url and url not in rendered_urls:
+                        label = item.get("type") or item.get("tag") or key.replace("_", " ").title()
+                        lines.append(f"\n{label}:")
+                        lines.append(url)
+                        rendered_urls.add(url)
+
     return "\n".join(lines)
 
 
