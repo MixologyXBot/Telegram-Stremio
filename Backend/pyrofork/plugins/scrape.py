@@ -162,20 +162,20 @@ def build_caption(data: dict, platform: str) -> str:
             lines.append(f"\n{label}:")
             lines.append(value)
             rendered_urls.add(value)
-        
+
         elif isinstance(value, list):
             for item in value:
+                url = None
                 if isinstance(item, dict):
                     url = item.get("url") or item.get("link")
+                    label = item.get("type") or item.get("tag") or key.replace("_", " ").title()
                 elif isinstance(item, str) and item.startswith("http"):
                     url = item
-                else:
-                    continue
-                    if url and url not in rendered_urls:
-                        label = (item.get("type") or item.get("tag") or key.replace("_", " ").title())
-                        lines.append(f"\n{label}:")
-                        lines.append(url)
-                        rendered_urls.add(url)
+                    label = key.replace("_", " ").title()
+                if url and url not in rendered_urls:
+                    lines.append(f"\n{label}:")
+                    lines.append(url)
+                    rendered_urls.add(url)
 
     return "\n".join(lines)
 
