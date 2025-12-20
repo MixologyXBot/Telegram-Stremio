@@ -42,7 +42,7 @@ PLATFORM_MAP = {
     "iqiyi": "iqiyi", "iq": "iqiyi",
     "wetv": "wetv", "wt": "wetv",
     "shemaroo": "shemaroo", "sm": "shemaroo",
-    "bms": "bookmyshow", "bm": "bookmyshow",
+    "bms": "bookmyshow", "bookmyshow": "bookmyshow",
     "plex": "plextv", "px": "plextv",
     "adda": "addatimes", "ad": "addatimes",
     "stage": "stage", "stg": "stage",
@@ -157,23 +157,18 @@ def build_caption(data: dict, platform: str) -> str:
         
     rendered_urls = set()
     for key, value in data.items():
-        if (
-            isinstance(value, str)
-            and value.startswith("http")
-            and value not in rendered_urls
-        ):
+        if isinstance(value, str) and value.startswith("http") and value not in rendered_urls:
             label = key.replace("_", " ").title()
             lines.append(f"\n{label}:")
             lines.append(value)
             rendered_urls.add(value)
-
-    for key, value in data.items():
-        if isinstance(value, list):
+        
+        elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
                     url = item.get("url") or item.get("link")
                     if url and url not in rendered_urls:
-                        label = item.get("type") or item.get("tag") or key.replace("_", " ").title()
+                        label = (item.get("type") or item.get("tag") or key.replace("_", " ").title())
                         lines.append(f"\n{label}:")
                         lines.append(url)
                         rendered_urls.add(url)
