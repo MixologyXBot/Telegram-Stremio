@@ -151,36 +151,21 @@ def build_caption(data: dict, platform: str) -> str:
                         lines.append(f"\n• <b>{name.capitalize()}:</b>")
                         lines.append(f"<blockquote expandable>{url}</blockquote>")
 
-    if isinstance(data.get("posters"), list):
-        for i, url in enumerate(data["posters"], 1):
-            if url:
-                lines.append(f"\n<b>Poster {i}:</b>")
-                lines.append(f"<blockquote expandable>{url}</blockquote>")
-
-    for key in ("images", "source", "landscape", "backdrop", "portrait", "poster", "poster_url"):
-        if data.get(key):
-            lines.append(f"\n<b>{key.capitalize()}:</b>")
-            lines.append(f"<blockquote expandable>{data[key]}</blockquote>")
-
     size = data.get("file_size") or data.get("filesize") or data.get("size")
     if size:
-        lines.append(f"\n<b>Size:</b> {size}")
-
-    links = data.get("links")
-    if isinstance(links, list):
-        lines.append("\n<b>Links:</b>")
-        for link in links:
-            url = link.get("url") or link.get("link")
-            if url:
-                tag = link.get("tag") or link.get("type") or "Link"
-                lines.append(f"\n• <b>{tag.capitalize()}:</b>")
-                lines.append(f"<blockquote expandable>{url}</blockquote>")
-    elif isinstance(links, dict):
-        lines.append("\n<b>Links:</b>")
-        for name, url in links.items():
-            if url:
-                lines.append(f"\n• <b>{name.capitalize()}:</b>")
-                lines.append(f"<blockquote expandable>{url}</blockquote>")
+        lines.append(f"\nSize: {size}")
+        
+    rendered_urls = set()
+    for key, value in data.items():
+        if (
+            isinstance(value, str)
+            and value.startswith("http")
+            and value not in rendered_urls
+        ):
+            label = key.replace("_", " ").title()
+            lines.append(f"\n{label}:")
+            lines.append(value)
+            rendered_urls.add(value)
 
     return "\n".join(lines)
 
