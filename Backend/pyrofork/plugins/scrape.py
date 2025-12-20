@@ -214,8 +214,8 @@ async def scrape_command(client: Client, message: Message):
             #platform, data = scrape_url(url)
             #if platform and data:
                 #captions.append(build_caption(data, platform))
-            if platform and data is not None:
-                captions.append(build_caption(data, platform))
+            if platform is not None:
+                captions.append(build_caption(data or {}, platform))
                 
                 LOGGER.info(f"[SCRAPE] platform={platform}")
         except Exception as e:
