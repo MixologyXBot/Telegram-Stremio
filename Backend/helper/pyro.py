@@ -130,7 +130,9 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
                 return {"error": res.get("error")}
             if res.get("success") and isinstance(res.get("data"), dict):
                 return res["data"]
-        return res
+            if res.get("ok"):
+                return res
+            return res
     except Exception as e:
         return {"error": str(e)}
 
