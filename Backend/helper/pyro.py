@@ -130,7 +130,7 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
             return {}
         if res.get("error"):
             return {"error": res["error"]}
-        if isinstance(res.get("data"), dict):
+        if isinstance(res.get("data"), dict) and res["data"]:
             return res["data"]
         return res
 
