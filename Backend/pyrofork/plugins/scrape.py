@@ -211,16 +211,12 @@ async def scrape_command(client: Client, message: Message):
 
     for url in urls:
         try:
-            #platform, data = scrape_url(url)
-            #if platform and data:
-                #captions.append(build_caption(data, platform))
+            platform, data = scrape_url(url)
             if platform is not None:
                 captions.append(build_caption(data or {}, platform))
-                
                 LOGGER.info(f"[SCRAPE] platform={platform}")
         except Exception as e:
             LOGGER.error(f"[SCRAPE] url={url} err={e}")
-
     if not captions:
         return await status.edit_text("This URL is not supported.")
 
