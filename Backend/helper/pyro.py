@@ -125,14 +125,18 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         )
         response.raise_for_status()
         res = response.json() or {}
-        if isinstance(res, dict):
-            if res.get("error"):
-                return {"error": res.get("error")}
-            if res.get("success") and isinstance(res.get("data"), dict):
-                return res["data"]
-            if res.get("ok"):
-                return res
-            return res
+
+        if not isinstance(res, dict):
+            return {"error": "Invalid API response"}
+
+        if res.get("error"):
+            return {"error": res["error"]}
+
+        if isinstance(res.get("data"), dict):
+            return res["data"]
+            
+        return res
+
     except Exception as e:
         return {"error": str(e)}
 
