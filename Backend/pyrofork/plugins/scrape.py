@@ -130,7 +130,7 @@ def build_caption(data: dict, platform: str) -> str:
             if item.get("quality"):
                 lines.append(f"\n<b>{item['quality']}</b>")
             if item.get("link"):
-                lines.append(f"<blockquote expandable>{item['link']}</blockquote>")
+                lines.append(f"<blockquote expandable><b>{item['link']}</b></blockquote>")
 
             if isinstance(item.get("links"), list):
                 for link in item["links"]:
@@ -138,24 +138,24 @@ def build_caption(data: dict, platform: str) -> str:
                     if url:
                         label = link.get("tag") or link.get("type") or "Link"
                         lines.append(f"\n<b>{label}:</b>")
-                        lines.append(f"<blockquote expandable>{url}</blockquote>")
+                        lines.append(f"<blockquote expandable><b>{url}</b></blockquote>")
 
             if isinstance(item.get("_debug"), dict):
                 for name, url in item["_debug"].items():
                     if url:
                         lines.append(f"\n<b>{name.capitalize()}:</b>")
-                        lines.append(f"<blockquote expandable>{url}</blockquote>")
+                        lines.append(f"<blockquote expandable><b>{url}</b></blockquote>")
 
     size = data.get("file_size") or data.get("filesize") or data.get("size")
     if size:
-        lines.append(f"\n<b>Size:</b> {size}")
+        lines.append(f"\n<b>Size: {size}</b>")
 
     rendered_urls = set()
     for key, value in data.items():
         if isinstance(value, str) and value.startswith("http") and value not in rendered_urls:
             label = key.replace("_", " ").title()
             lines.append(f"\n<b>{label}:</b>")
-            lines.append(f"<blockquote expandable>{value}</blockquote>")
+            lines.append(f"<blockquote expandable><b>{value}</b></blockquote>")
             rendered_urls.add(value)
         
         elif isinstance(value, list):
@@ -165,7 +165,7 @@ def build_caption(data: dict, platform: str) -> str:
                     if url and url not in rendered_urls:
                         label = (item.get("type") or item.get("tag") or key.replace("_", " ").title())
                         lines.append(f"\n<b>{label}:</b>")
-                        lines.append(f"<blockquote expandable>{url}</blockquote>")
+                        lines.append(f"<blockquote expandable><b>{url}</b></blockquote>")
                         rendered_urls.add(url)
 
     return "\n".join(lines)
