@@ -154,8 +154,8 @@ def build_caption(data: dict, platform: str) -> str:
     for key, value in data.items():
         if isinstance(value, str) and value.startswith("http") and value not in rendered_urls:
             label = key.replace("_", " ").title()
-            lines.append(f"\n{label}:")
-            lines.append(value)
+            lines.append(f"\n<b>{label}:</b>")
+            lines.append(f"<blockquote expandable>{value}</blockquote>")
             rendered_urls.add(value)
         
         elif isinstance(value, list):
@@ -164,8 +164,8 @@ def build_caption(data: dict, platform: str) -> str:
                     url = item.get("url") or item.get("link")
                     if url and url not in rendered_urls:
                         label = (item.get("type") or item.get("tag") or key.replace("_", " ").title())
-                        lines.append(f"\n{label}:")
-                        lines.append(url)
+                        lines.append(f"\n<b>{label}:</b>")
+                        lines.append(f"<blockquote expandable>{url}</blockquote>")
                         rendered_urls.add(url)
 
     return "\n".join(lines)
