@@ -10,6 +10,16 @@ class Telegram:
     HELPER_BOT_TOKEN = getenv("HELPER_BOT_TOKEN", "")
 
     BASE_URL = getenv("BASE_URL", "").rstrip('/')
+
+    INTERNAL_URL = getenv("INTERNAL_URL") or getenv("RENDER_EXTERNAL_URL")
+    if not INTERNAL_URL and getenv("HEROKU_APP_NAME"):
+        INTERNAL_URL = f"https://{getenv('HEROKU_APP_NAME')}.herokuapp.com"
+
+    if not INTERNAL_URL:
+        INTERNAL_URL = BASE_URL
+
+    INTERNAL_URL = (INTERNAL_URL or "").rstrip('/')
+
     PORT = int(getenv("PORT", "8000"))
 
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]

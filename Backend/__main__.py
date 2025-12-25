@@ -44,6 +44,11 @@ async def start_services():
         loop.create_task(ping())
         
         LOGGER.info("Telegram-Stremio Started Successfully!")
+
+        if Telegram.INTERNAL_URL:
+            await db.update_proxy_url(Telegram.INTERNAL_URL)
+            LOGGER.info(f"Registered Internal URL: {Telegram.INTERNAL_URL}")
+
         await idle()
     except Exception:
         LOGGER.error("Error during startup:\n" + format_exc())

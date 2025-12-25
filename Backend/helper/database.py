@@ -76,6 +76,15 @@ class Database:
             upsert=True
         )
 
+    async def update_proxy_url(self, url: str):
+        if not url:
+            return
+        await self.dbs["tracking"]["state"].update_one(
+            {"_id": "proxy_url"},
+            {"$set": {"url": url, "last_updated": datetime.utcnow()}},
+            upsert=True
+        )
+
 
     # -------------------------------
     # Helper Methods for Repeated Logic
