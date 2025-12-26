@@ -1,51 +1,13 @@
 import re
-from urllib.parse import urlparse
 
 from pyrogram import Client, filters, enums
 from pyrogram.types import Message
 
 from Backend.helper.custom_filter import CustomFilters
-from Backend.helper.pyro import fetch_scrape_data
+from Backend.helper.pyro import scrape_url_logic, clean_filename, get_readable_file_size, PLATFORM_MAP
+from Backend.helper.metadata import metadata
+from Backend import db
 from Backend.logger import LOGGER
-
-
-PLATFORM_MAP = {
-    "hubcloud": "hubcloud",
-    "vcloud": "vcloud",
-    "hubdrive": "hubdrive",
-    "hblinks": "hubdrive",
-    "driveleech": "driveleech",
-    "driveseed": "driveleech",
-    "gdrex": "gdrex",
-    "neolinks": "neo",
-    "neo": "neo",
-    "pixel": "pixelcdn",
-    "pixelcdn": "pixelcdn",
-    "hubcdn": "hubcdn",
-    "vegamovies": "vega",
-    "extraflix": "extraflix",
-    "extralink": "extralink",
-    "gdflix": "gdflix",
-    "gdlink": "gdflix",
-    "nexdrive": "nexdrive",
-
-    "netflix": "netflix", "nf": "netflix",
-    "prime": "primevideo", "pv": "primevideo",
-    "appletv": "appletv", "atv": "appletv",
-    "zee5": "zee5", "z5": "zee5",
-    "crunchyroll": "crunchyroll",
-    "airtel": "airtelxstream", "ax": "airtelxstream",
-    "sunnxt": "sunnxt", "sn": "sunnxt",
-    "aha": "ahavideo", "ah": "ahavideo",
-    "iqiyi": "iqiyi", "iq": "iqiyi",
-    "wetv": "wetv", "wt": "wetv",
-    "shemaroo": "shemaroo", "sm": "shemaroo",
-    "bms": "bookmyshow", "bookmyshow": "bookmyshow",
-    "plex": "plextv", "px": "plextv",
-    "adda": "addatimes", "ad": "addatimes",
-    "stage": "stage", "stg": "stage",
-    "mxplayer": "mxplayer", "mx": "mxplayer",
-}
 
 
 DISPLAY_NAME = {
@@ -80,31 +42,6 @@ DISPLAY_NAME = {
     "stage": "STAGE",
     "mxplayer": "MX Player",
 }
-
-
-def scrape_url(url: str):
-    try:
-        parsed = urlparse(url)
-        if not parsed.scheme or not parsed.netloc:
-            return None, None
-    except Exception:
-        return None, None
-
-    lowered = url.lower()
-    platform = next((v for k, v in PLATFORM_MAP.items() if k in lowered), None)
-    if not platform:
-        return None, None
-
-    if platform == "primevideo":
-        m = re.search(r"gti=([^&]+)", url)
-        if m:
-            url = f"https://app.primevideo.com/detail?gti={m.group(1)}"
-
-    data = fetch_scrape_data(platform, url)
-    if not isinstance(data, dict) or data.get("error"):
-        return platform, None
-
-    return platform, data
 
 
 def build_caption(data: dict, platform: str) -> str:
@@ -197,10 +134,34 @@ async def scrape_command(client: Client, message: Message):
 
     for url in urls:
         try:
-            platform, data = scrape_url(url)
+            platform, data = await scrape_url_logic(url)
             if platform:
-                captions.append(build_caption(data or {}, platform))
-                LOGGER.info(f"[SCRAPE] platform={platform}")
+                # Build caption
+                caption = build_caption(data or {}, platform)
+
+                # Check for file_name and save to DB
+                file_name = data.get("file_name")
+                if file_name:
+                    metadata_info = await metadata(clean_filename(file_name))
+                    if metadata_info:
+                        size = data.get("file_size") or data.get("filesize") or data.get("size") or "0B"
+                        saved_id = await db.insert_media(
+                            metadata_info=metadata_info,
+                            channel=None,
+                            msg_id=None,
+                            size=size,
+                            name=file_name,
+                            url=url
+                        )
+                        if saved_id:
+                            caption += f"\n\n✅ <b>Saved to DB:</b> <code>{saved_id}</code>"
+                        else:
+                            caption += f"\n\n❌ <b>Failed to save to DB (validation error?)</b>"
+                    else:
+                         caption += f"\n\n⚠️ <b>Metadata not found for:</b> <code>{file_name}</code>"
+
+                captions.append(caption)
+                LOGGER.info(f"[SCRAPE] platform={platform} url={url}")
         except Exception as e:
             LOGGER.error(f"[SCRAPE] url={url} err={e}")
 

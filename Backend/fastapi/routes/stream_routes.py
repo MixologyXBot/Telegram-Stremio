@@ -3,11 +3,13 @@ import secrets
 import mimetypes
 from typing import Tuple
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
+from urllib.parse import unquote
 
 from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
+from Backend.helper.pyro import scrape_url_logic
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
 
 router = APIRouter(tags=["Streaming"])
@@ -38,21 +40,51 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
 @router.get("/dl/{id}/{name}")
 @router.head("/dl/{id}/{name}")
 async def stream_handler(request: Request, id: str, name: str):
-    decoded_data = await decode_string(id)
-    if not decoded_data.get("msg_id"):
-        raise HTTPException(status_code=400, detail="Missing id")
+    # Try decoding as Telegram ID
+    try:
+        decoded_data = await decode_string(id)
+    except Exception:
+        decoded_data = {}
 
-    chat_id = f"-100{decoded_data['chat_id']}"
-    message = await StreamBot.get_messages(int(chat_id), int(decoded_data["msg_id"]))
-    file = message.video or message.document
-    file_hash = file.file_unique_id[:6]
+    # If it looks like a Telegram ID (has msg_id and chat_id)
+    if decoded_data.get("msg_id") and decoded_data.get("chat_id"):
+        chat_id = f"-100{decoded_data['chat_id']}"
+        message = await StreamBot.get_messages(int(chat_id), int(decoded_data["msg_id"]))
+        file = message.video or message.document
+        file_hash = file.file_unique_id[:6]
 
-    return await media_streamer(
-        request,
-        chat_id=int(chat_id),
-        id=int(decoded_data["msg_id"]),
-        secure_hash=file_hash
-    )
+        return await media_streamer(
+            request,
+            chat_id=int(chat_id),
+            id=int(decoded_data["msg_id"]),
+            secure_hash=file_hash
+        )
+
+    # Otherwise, treat as an external URL (GDFlix / Hubcloud)
+    original_url = unquote(id)
+    # Basic check if it's a URL
+    if not (original_url.startswith("http://") or original_url.startswith("https://")):
+         # Fallback if decode_string didn't error but didn't return msg_id (unlikely with current impl)
+         # or if it's just garbage
+         raise HTTPException(status_code=400, detail="Invalid ID or URL")
+
+    # Scrape real-time
+    platform, data = await scrape_url_logic(original_url)
+
+    direct_link = None
+    if data:
+        direct_link = data.get("link")
+        # Fallback: check nested links
+        if not direct_link and isinstance(data.get("links"), list):
+             for link_item in data["links"]:
+                 if link_item.get("url"):
+                     direct_link = link_item.get("url")
+                     break
+
+    if direct_link:
+        return RedirectResponse(url=direct_link)
+
+    raise HTTPException(status_code=404, detail="Could not extract stream link")
 
 
 async def media_streamer(

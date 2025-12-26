@@ -176,8 +176,11 @@ class Database:
 
     async def insert_media(
         self, metadata_info: dict,
-        channel: int, msg_id: int, size: str, name: str
+        channel: Optional[int], msg_id: Optional[int], size: str, name: str, url: Optional[str] = None
     ) -> Optional[ObjectId]:
+
+        if url:
+             metadata_info['encoded_string'] = url
         
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(

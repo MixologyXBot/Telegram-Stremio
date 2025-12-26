@@ -1,5 +1,5 @@
 from pyrogram.file_id import FileId
-from typing import Optional
+from typing import Optional, Tuple, Dict, Any
 from Backend.logger import LOGGER
 from Backend import __version__, now, timezone
 from Backend.config import Telegram
@@ -8,11 +8,51 @@ from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
+from urllib.parse import urlparse
 import re
 import requests
+import httpx
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
+
+PLATFORM_MAP = {
+    "hubcloud": "hubcloud",
+    "vcloud": "vcloud",
+    "hubdrive": "hubdrive",
+    "hblinks": "hubdrive",
+    "driveleech": "driveleech",
+    "driveseed": "driveleech",
+    "gdrex": "gdrex",
+    "neolinks": "neo",
+    "neo": "neo",
+    "pixel": "pixelcdn",
+    "pixelcdn": "pixelcdn",
+    "hubcdn": "hubcdn",
+    "vegamovies": "vega",
+    "extraflix": "extraflix",
+    "extralink": "extralink",
+    "gdflix": "gdflix",
+    "gdlink": "gdflix",
+    "nexdrive": "nexdrive",
+
+    "netflix": "netflix", "nf": "netflix",
+    "prime": "primevideo", "pv": "primevideo",
+    "appletv": "appletv", "atv": "appletv",
+    "zee5": "zee5", "z5": "zee5",
+    "crunchyroll": "crunchyroll",
+    "airtel": "airtelxstream", "ax": "airtelxstream",
+    "sunnxt": "sunnxt", "sn": "sunnxt",
+    "aha": "ahavideo", "ah": "ahavideo",
+    "iqiyi": "iqiyi", "iq": "iqiyi",
+    "wetv": "wetv", "wt": "wetv",
+    "shemaroo": "shemaroo", "sm": "shemaroo",
+    "bms": "bookmyshow", "bookmyshow": "bookmyshow",
+    "plex": "plextv", "px": "plextv",
+    "adda": "addatimes", "ad": "addatimes",
+    "stage": "stage", "stg": "stage",
+    "mxplayer": "mxplayer", "mx": "mxplayer",
+}
 
 def is_media(message):
     return next((getattr(message, attr) for attr in ["document", "photo", "video", "audio", "voice", "video_note", "sticker", "animation"] if getattr(message, attr)), None)
@@ -137,6 +177,50 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+async def fetch_scrape_data_async(platform: str, url: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                f"{Telegram.SCRAPE_API}/api/{platform}",
+                params={"url": url}
+            )
+            response.raise_for_status()
+            res = response.json() or {}
+
+            if not isinstance(res, dict):
+                return {}
+            if res.get("error"):
+                return {"error": res["error"]}
+            if isinstance(res.get("data"), dict) and res["data"]:
+                return res["data"]
+            return res
+
+    except Exception as e:
+        return {"error": str(e)}
+
+async def scrape_url_logic(url: str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return None, None
+    except Exception:
+        return None, None
+
+    lowered = url.lower()
+    platform = next((v for k, v in PLATFORM_MAP.items() if k in lowered), None)
+    if not platform:
+        return None, None
+
+    if platform == "primevideo":
+        m = re.search(r"gti=([^&]+)", url)
+        if m:
+            url = f"https://app.primevideo.com/detail?gti={m.group(1)}"
+
+    data = await fetch_scrape_data_async(platform, url)
+    if not isinstance(data, dict) or data.get("error"):
+        return platform, None
+
+    return platform, data
 
 async def restart_notification():
     chat_id, msg_id = 0, 0
@@ -186,4 +270,3 @@ async def setup_bot_commands(bot: Client):
         LOGGER.info("Bot commands updated successfully.")
     except Exception as e:
         LOGGER.error(f"Error setting up bot commands: {e}")
-
