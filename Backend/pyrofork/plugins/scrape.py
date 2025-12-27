@@ -153,7 +153,7 @@ def build_caption(data: dict, platform: str) -> str:
     rendered_urls = set()
     for key, value in data.items():
         if isinstance(value, str) and value.startswith("http") and value not in rendered_urls:
-            label = key.replace("_", " ").title()
+            label = key.replace("_", " ")
             lines.append(f"\n<b>{label}:</b>")
             lines.append(f"<blockquote expandable><b>{value}</b></blockquote>")
             rendered_urls.add(value)
@@ -163,7 +163,7 @@ def build_caption(data: dict, platform: str) -> str:
                 if isinstance(item, dict):
                     url = item.get("url") or item.get("link")
                     if url and url not in rendered_urls:
-                        label = (item.get("type") or item.get("tag") or key.replace("_", " ").title())
+                        label = item.get("type") or item.get("tag") or key.replace("_", " ")
                         lines.append(f"\n<b>{label}:</b>")
                         lines.append(f"<blockquote expandable><b>{url}</b></blockquote>")
                         rendered_urls.add(url)
