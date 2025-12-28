@@ -9,10 +9,6 @@ from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
-import httpx
-from Backend.logger import LOGGER
-from Backend.helper.pyro import fetch_scrape_data_async
-from fastapi.responses import RedirectResponse
 
 router = APIRouter(tags=["Streaming"])
 class_cache = {}
@@ -57,25 +53,6 @@ async def stream_handler(request: Request, id: str, name: str):
         id=int(decoded_data["msg_id"]),
         secure_hash=file_hash
     )
-
-
-@router.get("/stream/{platform}/{encoded_url}")
-@router.head("/stream/{platform}/{encoded_url}")
-async def external_stream_handler(platform: str, encoded_url: str):
-    try:
-        url = await decode_string(encoded_url)
-        target_url = url.get("url") if isinstance(url, dict) else url
-
-        data = await fetch_scrape_data_async(platform, target_url)
-
-        if data and data.get("stream_url"):
-            return RedirectResponse(url=data["stream_url"])
-
-        raise HTTPException(status_code=404, detail=f"Could not resolve {platform} link")
-
-    except Exception as e:
-        LOGGER.error(f"{platform} stream error: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 async def media_streamer(

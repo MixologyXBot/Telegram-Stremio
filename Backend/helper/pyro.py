@@ -10,7 +10,6 @@ from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
 import requests
-import httpx
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -126,29 +125,6 @@ def fetch_scrape_data(platform: str, url: str) -> dict:
         )
         response.raise_for_status()
         res = response.json() or {}
-
-        if not isinstance(res, dict):
-            return {}
-        if res.get("error"):
-            return {"error": res["error"]}
-        if isinstance(res.get("data"), dict) and res["data"]:
-            return res["data"]
-        return res
-
-    except Exception as e:
-        return {"error": str(e)}
-
-
-async def fetch_scrape_data_async(platform: str, url: str) -> dict:
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{Telegram.SCRAPE_API}/api/{platform}",
-                params={"url": url},
-                timeout=15
-            )
-            response.raise_for_status()
-            res = response.json() or {}
 
         if not isinstance(res, dict):
             return {}
