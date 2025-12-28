@@ -22,6 +22,7 @@ class Episode(BaseModel):
     overview: Optional[str] = None
     released: Optional[str] = None
     telegram: Optional[List[QualityDetail]]
+    stream_providers: Optional[List[QualityDetail]] = None
 
 
 # ---------------------------
@@ -74,3 +75,4 @@ class MovieSchema(BaseModel):
     media_type: str
     updated_on: datetime = Field(default_factory=datetime.utcnow)
     telegram: Optional[List[QualityDetail]]
+    stream_providers: Optional[List[QualityDetail]] = None
