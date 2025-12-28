@@ -1,5 +1,7 @@
 from asyncio import create_task, sleep as asleep, Queue, Lock
 import re
+import Backend
+from Backend.helper.task_manager import edit_message
 from Backend.logger import LOGGER
 from Backend import db
 from Backend.config import Telegram
@@ -80,6 +82,14 @@ async def link_handler(client: Client, message: Message):
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for link: {title}")
             continue
+
+        if Backend.USE_DEFAULT_ID:
+            new_caption = (message.text or message.caption) + "\n\n" + Backend.USE_DEFAULT_ID
+            create_task(edit_message(
+                chat_id=message.chat.id,
+                msg_id=message.id,
+                new_caption=new_caption
+            ))
 
         # Enqueue for DB insertion
         # We pass 0 for 'channel' and 'msg_id' in insert_media context if we want to avoid

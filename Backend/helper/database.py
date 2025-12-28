@@ -561,8 +561,11 @@ class Database:
 
                 existing_episode.setdefault("telegram", [])
 
-                for quality in episode.telegram:
-                    target_quality = quality.quality
+                # Handle Telegram files (episode is a dict here)
+                ep_telegram = episode.get("telegram", []) or []
+                for quality in ep_telegram:
+                    # quality is a dict here because tv_show_dict was created with .dict()
+                    target_quality = quality.get("quality")
 
                     if Telegram.REPLACE_MODE:
                         to_delete = [
@@ -585,10 +588,10 @@ class Database:
                             q for q in existing_episode["telegram"]
                             if q.get("quality") != target_quality
                         ]
-                        existing_episode["telegram"].append(quality.dict())
+                        existing_episode["telegram"].append(quality)
 
                     else:
-                        existing_episode["telegram"].append(quality.dict())
+                        existing_episode["telegram"].append(quality)
 
         existing_tv["updated_on"] = datetime.utcnow()
 
@@ -687,10 +690,13 @@ class Database:
                     existing_season["episodes"].append(episode)
                     continue
 
-                if episode.stream_providers:
+                # episode is a dict
+                ep_providers = episode.get("stream_providers")
+                if ep_providers:
                     existing_episode.setdefault("stream_providers", [])
-                    for provider in episode.stream_providers:
-                        existing_episode["stream_providers"].append(provider.dict())
+                    for provider in ep_providers:
+                        # provider is a dict
+                        existing_episode["stream_providers"].append(provider)
 
         existing_tv["updated_on"] = datetime.utcnow()
 
