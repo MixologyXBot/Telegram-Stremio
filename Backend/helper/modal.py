@@ -74,5 +74,5 @@ class MovieSchema(BaseModel):
     runtime: Optional[str] = None
     media_type: str
     updated_on: datetime = Field(default_factory=datetime.utcnow)
-    telegram: Optional[List[QualityDetail]]
+    telegram: Optional[List[QualityDetail]] = None
     stream_providers: Optional[List[QualityDetail]] = None

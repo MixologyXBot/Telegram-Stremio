@@ -15,11 +15,11 @@ db_lock = Lock()
 async def process_link():
     while True:
         metadata_info, channel, msg_id, size, title, stream_url = await link_queue.get()
-        # Inject stream_url into metadata_info so insert_media knows to use stream_providers
+        # Inject stream_url into metadata_info so insert_link knows to use stream_providers
         metadata_info['stream_url'] = stream_url
 
         async with db_lock:
-            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, name=title)
+            updated_id = await db.insert_link(metadata_info, size=size, name=title)
             if updated_id:
                 LOGGER.info(f"{metadata_info['media_type']} link updated with ID: {updated_id}")
             else:
