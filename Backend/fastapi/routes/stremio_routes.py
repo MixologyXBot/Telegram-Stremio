@@ -308,7 +308,7 @@ async def get_streams(media_type: str, id: str):
                     "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
                 })
 
-    # Process Stream Providers (e.g., GDFlix)
+    # Process Stream Providers (e.g., GDFlix, HubCloud)
     if media_details and "stream_providers" in media_details:
         from Backend.helper.encrypt import encode_string
         for provider in media_details.get("stream_providers", []):
@@ -318,22 +318,23 @@ async def get_streams(media_type: str, id: str):
                 size = provider.get('size', '')
                 source_url = provider.get("id")
 
+                # Detect platform
+                platform = "gdflix" if "gdflix" in source_url.lower() else ("hubcloud" if "hubcloud" in source_url.lower() else "external")
+
                 # Encode the source URL to pass it safely in the path
                 try:
                     encoded_url = await encode_string({"url": source_url})
                 except:
                     # Fallback if encode_string expects something else or fails.
-                    # Assuming encode_string returns a url-safe string from a dict.
                     continue
 
                 stream_name, stream_title = format_stream_details(filename, quality_str, size)
-                # Differentiate stream provider links if needed, e.g., append "[GDFlix]" to title
-                stream_title += "\n🌐 External Stream"
+                stream_title += f"\n🌐 {platform.capitalize()} Stream"
 
                 streams.append({
                     "name": stream_name,
                     "title": stream_title,
-                    "url": f"{BASE_URL}/stream/gdflix/{encoded_url}"
+                    "url": f"{BASE_URL}/stream/{platform}/{encoded_url}"
                 })
 
     streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)

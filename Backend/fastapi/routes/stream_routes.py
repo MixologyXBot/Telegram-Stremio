@@ -11,6 +11,7 @@ from Backend.helper.custom_dl import ByteStreamer
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
 import httpx
 from Backend.logger import LOGGER
+from Backend.helper.pyro import fetch_scrape_data_async
 from fastapi.responses import RedirectResponse
 
 router = APIRouter(tags=["Streaming"])
@@ -58,28 +59,22 @@ async def stream_handler(request: Request, id: str, name: str):
     )
 
 
-@router.get("/stream/gdflix/{encoded_url}")
-@router.head("/stream/gdflix/{encoded_url}")
-async def gdflix_stream_handler(encoded_url: str):
+@router.get("/stream/{platform}/{encoded_url}")
+@router.head("/stream/{platform}/{encoded_url}")
+async def external_stream_handler(platform: str, encoded_url: str):
     try:
         url = await decode_string(encoded_url)
         target_url = url.get("url") if isinstance(url, dict) else url
 
-        api_url = f"https://bypass-api-mixologyxbot.vercel.app/api/gdflix?url={target_url}"
+        data = await fetch_scrape_data_async(platform, target_url)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(api_url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+        if data and data.get("stream_url"):
+            return RedirectResponse(url=data["stream_url"])
 
-        if data.get("success") and data.get("data", {}).get("stream_url"):
-            stream_url = data["data"]["stream_url"]
-            return RedirectResponse(url=stream_url)
-
-        raise HTTPException(status_code=404, detail="Could not resolve GDFlix link")
+        raise HTTPException(status_code=404, detail=f"Could not resolve {platform} link")
 
     except Exception as e:
-        LOGGER.error(f"GDFlix stream error: {e}")
+        LOGGER.error(f"{platform} stream error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 

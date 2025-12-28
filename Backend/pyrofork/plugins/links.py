@@ -1,11 +1,10 @@
 from asyncio import create_task, sleep as asleep, Queue, Lock
 import re
-import httpx
 from Backend.logger import LOGGER
 from Backend import db
 from Backend.config import Telegram
 from Backend.helper.metadata import metadata
-from Backend.helper.pyro import clean_filename, get_readable_file_size
+from Backend.helper.pyro import clean_filename, get_readable_file_size, fetch_scrape_data_async
 from pyrogram import filters, Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
@@ -30,19 +29,12 @@ async def process_link():
 for _ in range(1):
     create_task(process_link())
 
-async def get_gdflix_metadata(url: str):
-    api_url = f"https://bypass-api-mixologyxbot.vercel.app/api/gdflix?url={url}"
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(api_url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("success"):
-                return data.get("data")
-        return None
-    except Exception as e:
-        LOGGER.error(f"GDFlix API Error: {e}")
-        return None
+def get_platform(url: str):
+    if "gdflix" in url.lower():
+        return "gdflix"
+    if "hubcloud" in url.lower():
+        return "hubcloud"
+    return None
 
 @Client.on_message(filters.chat(Telegram.LINKS_CHANNEL) & filters.text)
 async def link_handler(client: Client, message: Message):
@@ -50,23 +42,27 @@ async def link_handler(client: Client, message: Message):
     if not text:
         return
 
-    # Extract GDFlix links
-    # Assuming standard gdflix links or similar structure
-    # The requirement gives "https://new10.gdflix.net/file/..." as an example
-    # I'll look for http/https links containing 'gdflix'
+    # Extract links
     urls = re.findall(r'(https?://[^\s]+)', text)
-    gdflix_urls = [u for u in urls if 'gdflix' in u.lower()]
 
-    if not gdflix_urls:
+    # Filter for supported platforms
+    supported_urls = [u for u in urls if get_platform(u)]
+
+    if not supported_urls:
         return
 
-    for url in gdflix_urls:
-        data = await get_gdflix_metadata(url)
-        if not data:
+    for url in supported_urls:
+        platform = get_platform(url)
+        if not platform:
+            continue
+
+        data = await fetch_scrape_data_async(platform, url)
+        if not data or data.get("error"):
+            LOGGER.warning(f"Failed to fetch metadata for {url}: {data.get('error')}")
             continue
 
         file_name = data.get("file_name")
-        file_size = data.get("file_size") # This might be a string like "1.2 GB" or bytes
+        file_size = data.get("file_size")
 
         if not file_name:
             continue
