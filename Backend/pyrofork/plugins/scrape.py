@@ -167,6 +167,11 @@ def build_caption(data: dict, platform: str) -> str:
                         lines.append(f"\n<b>{label}:</b>")
                         lines.append(f"<blockquote expandable><b>{url}</b></blockquote>")
                         rendered_urls.add(url)
+                elif isinstance(item, str) and item.startswith("http") and item not in rendered_urls:
+                    label = key.replace("_", " ")
+                    lines.append(f"\n<b>{label}:</b>")
+                    lines.append(f"<blockquote expandable><b>{item}</b></blockquote>")
+                    rendered_urls.add(item)
 
     return "\n".join(lines)
 
