@@ -121,6 +121,22 @@ def build_caption(data: dict, platform: str) -> str:
 
     lines.append(f"<b>{title}{f' - ({year})' if year else ''}</b>")
 
+    if isinstance(data.get("data"), list):
+        for item in data["data"]:
+            if item.get("file_name"):
+                lines.append(f"\n<b>{item['file_name']}</b>")
+
+            size = item.get("size") or item.get("file_size")
+            if size:
+                lines.append(f"\n<b>Size: {size}</b>")
+
+            for key, value in item.items():
+                if key in ["file_name", "size", "file_size"]:
+                    continue
+                if isinstance(value, str) and value.startswith("http"):
+                     lines.append(f"\n<b>{key}:</b>")
+                     lines.append(f"<blockquote expandable><b>{value}</b></blockquote>")
+
     if isinstance(data.get("results"), list):
         for item in data["results"]:
             if item.get("file_name"):
