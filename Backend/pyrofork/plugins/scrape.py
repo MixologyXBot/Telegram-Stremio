@@ -161,12 +161,29 @@ def build_caption(data: dict, platform: str) -> str:
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
+                    if item.get("file_name"):
+                        lines.append(f"\n<b>{item['file_name']}</b>")
+
+                    sz = item.get("file_size") or item.get("size")
+                    if sz:
+                        lines.append(f"<b>Size: {sz}</b>")
+
                     url = item.get("url") or item.get("link")
                     if url and url not in rendered_urls:
                         label = item.get("type") or item.get("tag") or key.replace("_", " ")
                         lines.append(f"\n<b>{label}:</b>")
                         lines.append(f"<blockquote expandable><b>{url}</b></blockquote>")
                         rendered_urls.add(url)
+
+                    for k, v in item.items():
+                        if k in ["file_name", "file_size", "size", "url", "link", "type", "tag", "quality", "title"]:
+                            continue
+
+                        if isinstance(v, str) and v.startswith("http") and v not in rendered_urls:
+                            lines.append(f"\n<b>{k}:</b>")
+                            lines.append(f"<blockquote expandable><b>{v}</b></blockquote>")
+                            rendered_urls.add(v)
+
                 elif isinstance(item, str) and item.startswith("http") and item not in rendered_urls:
                     label = key.replace("_", " ")
                     lines.append(f"\n<b>{label}:</b>")
