@@ -1,60 +1,98 @@
 import httpx
 from Backend.config import Telegram
 
+
 class BaseProvider:
     name = ""
     domains = ()
+    ALLOWED_KEYS = ()
 
     @classmethod
     def match(cls, url: str) -> bool:
         return any(domain in url for domain in cls.domains)
 
     @classmethod
-    async def fetch(cls, url: str) -> dict | None:
-        raise NotImplementedError
+    def extract_links(cls, data: dict) -> dict:
+        return {
+            key: data[key]
+            for key in cls.ALLOWED_KEYS
+            if key in data and data[key]
+        }
 
 
 class HubCloudProvider(BaseProvider):
     name = "HubCloud"
     domains = ("hubcloud.",)
+    ALLOWED_KEYS = (
+        "Download File",
+        "Download [FSLv2 Server]",
+        "Download [Server : 10Gbps]",
+        "Download [PixelServer:2]",
+        "Download [PixelServer : 2]",
+        "Download [ZipDisk Server]",
+    )
 
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.get(
                 f"{Telegram.SCRAPE_API}/api/hubcloud",
                 params={"url": url},
-                timeout=15
+                timeout=15,
             )
-            if r.status_code != 200:
+
+            if response.status_code != 200:
                 return None
-            data = r.json()
-            return data["data"] if data.get("success") else None
+
+            response_json = response.json()
+            if not response_json.get("success"):
+                return None
+
+            return cls.extract_links(response_json.get("data", {}))
 
 
 class GDFlixProvider(BaseProvider):
     name = "GDFlix"
     domains = ("gdflix.", "gdlink.")
+    ALLOWED_KEYS = (
+        "Instant DL [10GBPS]",
+        "Cloud Download (R2)",
+        "Cloud Resume Download",
+        "PixelDrain DL [20MB/S]",
+        "GoFile",
+    )
 
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
-        async with httpx.AsyncClient() as client:
-            r = await client.get(
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.get(
                 f"{Telegram.SCRAPE_API}/api/gdflix",
                 params={"url": url},
-                timeout=15
+                timeout=15,
             )
-            if r.status_code != 200:
+
+            if response.status_code != 200:
                 return None
-            data = r.json()
-            return data["data"][0] if data.get("success") and data.get("data") else None
+
+            response_json = response.json()
+            if not response_json.get("success"):
+                return None
+
+            return cls.extract_links(response_json.get("data", {}))
 
 
-PROVIDERS = [HubCloudProvider, GDFlixProvider]
-SUPPORTED_DOMAINS = tuple(domain for p in PROVIDERS for domain in p.domains)
+PROVIDERS = (
+    HubCloudProvider,
+    GDFlixProvider,
+)
+
+SUPPORTED_DOMAINS = tuple(
+    domain for provider in PROVIDERS for domain in provider.domains
+)
+
 
 def detect_provider(url: str):
-    for provider in PROVIDERS:
-        if provider.match(url):
-            return provider
-    return None
+    return next(
+        (provider for provider in PROVIDERS if provider.match(url)),
+        None
+    )
