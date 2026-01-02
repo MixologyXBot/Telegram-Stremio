@@ -301,6 +301,7 @@ async def get_streams(media_type: str, id: str):
             quality_str = quality.get('quality', 'HD')
             size = quality.get('size', '')
 
+            decoded_data = await decode_string(id)
             source = (decoded_data.get("provider") or "Telegram").capitalize()
             stream_name, stream_title = format_stream_details(filename, quality_str, size, source)
 
