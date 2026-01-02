@@ -14,6 +14,7 @@ from pyrogram.errors import FloodWait
 from pyrogram.enums.parse_mode import ParseMode
 import re
 import httpx
+import traceback
 
 
 file_queue = Queue()
@@ -98,6 +99,7 @@ async def link_receive_handler(client: Client, message: Message):
 
         except Exception as e:
             LOGGER.error(f"Error processing {url}: {e}")
+            LOGGER.error(traceback.format_exc())
 
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
