@@ -3,6 +3,7 @@ from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
 from Backend import db, __version__
+from Backend.helper.encrypt import decode_string
 import PTN
 from datetime import datetime, timezone, timedelta
 
@@ -50,11 +51,24 @@ def convert_to_stremio_meta(item: dict) -> dict:
     return meta
 
 
-def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, str]:
+async def format_stream_details(filename: str, quality: str, size: str, id_str: str) -> tuple[str, str]:
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n💾 {size}")
+        parsed = {}
+
+    # Check for HubCloud
+    is_hubcloud = False
+    try:
+        decoded = await db.decode_string(id_str) if hasattr(db, "decode_string") else await decode_string(id_str)
+        if decoded.get("hubcloud_url") and "hubcloud" in decoded.get("hubcloud_url", ""):
+            is_hubcloud = True
+    except Exception:
+        pass
+
+    if not parsed:
+         prefix = "🔗 HubCloud |" if is_hubcloud else "Telegram"
+         return (f"{prefix} {quality}".strip(), f"📁 {filename}\n💾 {size}")
 
     codec_parts = []
     if parsed.get("codec"):
@@ -70,7 +84,9 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
 
     resolution = parsed.get("resolution", quality)
     quality_type = parsed.get("quality", "")
-    stream_name = f"Telegram {resolution} {quality_type}".strip()
+
+    prefix = "🔗 HubCloud |" if is_hubcloud else "Telegram"
+    stream_name = f"{prefix} {resolution} {quality_type}".strip()
 
     stream_title_parts = [
         f"📁 {filename}",
@@ -300,7 +316,7 @@ async def get_streams(media_type: str, id: str):
             quality_str = quality.get('quality', 'HD')
             size = quality.get('size', '')
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+            stream_name, stream_title = await format_stream_details(filename, quality_str, size, quality.get("id"))
 
             streams.append({
                 "name": stream_name,
