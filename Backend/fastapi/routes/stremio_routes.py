@@ -51,11 +51,11 @@ def convert_to_stremio_meta(item: dict) -> dict:
     return meta
 
 
-def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, str]:
+def format_stream_details(filename: str, quality: str, size: str, source: str = "Telegram") -> tuple[str, str]:
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n💾 {size}")
+        return (f"{source} {quality}", f"📁 {filename}\n💾 {size}")
 
     codec_parts = []
     if parsed.get("codec"):
@@ -301,7 +301,7 @@ async def get_streams(media_type: str, id: str):
             quality_str = quality.get('quality', 'HD')
             size = quality.get('size', '')
 
-            decoded_data = await decode_string(id)
+            decoded_data = await decode_string(quality.get('id'))
             source = (decoded_data.get("provider") or "Telegram").capitalize()
             stream_name, stream_title = format_stream_details(filename, quality_str, size, source)
 
