@@ -25,6 +25,7 @@ class HubCloudProvider(BaseProvider):
     domains = ("hubcloud.",)
     ALLOWED_KEYS = (
         "Download File",
+        "Download [FSL Server]",
         "Download [FSLv2 Server]",
         "Download [Server : 10Gbps]",
         "Download [PixelServer:2]",
