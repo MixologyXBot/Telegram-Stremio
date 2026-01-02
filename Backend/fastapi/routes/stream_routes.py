@@ -3,12 +3,15 @@ import secrets
 import mimetypes
 from typing import Tuple
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 
 from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
+from Backend.config import Telegram
+from Backend.logger import LOGGER
+import httpx
 
 router = APIRouter(tags=["Streaming"])
 class_cache = {}
@@ -39,6 +42,32 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
 @router.head("/dl/{id}/{name}")
 async def stream_handler(request: Request, id: str, name: str):
     decoded_data = await decode_string(id)
+    
+    # Check for HubCloud URL
+    if decoded_data.get("hubcloud_url"):
+        url = decoded_data["hubcloud_url"]
+        try:
+             async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(
+                    f"{Telegram.SCRAPE_API}/api/hubcloud",
+                    params={"url": url},
+                    timeout=15
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and data.get("data"):
+                        hub_data = data["data"]
+                        # Find first non-null download link
+                        for key, value in hub_data.items():
+                            if key.startswith("Download") and value:
+                                LOGGER.info(f"Redirecting HubCloud stream to: {value}")
+                                return RedirectResponse(url=value)
+        except Exception as e:
+            LOGGER.error(f"Error fetching HubCloud stream for {url}: {e}")
+        
+        raise HTTPException(status_code=404, detail="Stream not found")
+
+
     if not decoded_data.get("msg_id"):
         raise HTTPException(status_code=400, detail="Missing id")
 
