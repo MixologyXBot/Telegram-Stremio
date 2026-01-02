@@ -48,7 +48,12 @@ class HubCloudProvider(BaseProvider):
             if not response_json.get("success"):
                 return None
 
-            return cls.extract_links(response_json.get("data", {}))
+            data = response_json.get("data", {})
+            return {
+                "file_name": data.get("file_name"),
+                "size": data.get("size"),
+                "links": cls.extract_links(data),
+            }
 
 
 class GDFlixProvider(BaseProvider):
@@ -78,8 +83,12 @@ class GDFlixProvider(BaseProvider):
             if not response_json.get("success"):
                 return None
 
-            return cls.extract_links(response_json.get("data", {}))
-
+            data = response_json.get("data", {})
+            return {
+                "file_name": data.get("file_name"),
+                "size": data.get("size"),
+                "links": cls.extract_links(data),
+            }
 
 PROVIDERS = (
     HubCloudProvider,
