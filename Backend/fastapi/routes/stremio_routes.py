@@ -5,6 +5,8 @@ from Backend.config import Telegram
 from Backend import db, __version__
 import PTN
 from datetime import datetime, timezone, timedelta
+from Backend.helper.encrypt import decode_string
+from Backend.providers import PROVIDERS
 
 
 # --- Configuration ---
@@ -50,11 +52,14 @@ def convert_to_stremio_meta(item: dict) -> dict:
     return meta
 
 
-def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, str]:
+def format_stream_details(filename: str, quality: str, size: str, provider_name: str = None) -> tuple[str, str]:
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n💾 {size}")
+        name = f"Telegram {quality}"
+        if provider_name:
+             name = f"🔗 {provider_name} | {quality}"
+        return (name, f"📁 {filename}\n💾 {size}")
 
     codec_parts = []
     if parsed.get("codec"):
@@ -70,7 +75,10 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
 
     resolution = parsed.get("resolution", quality)
     quality_type = parsed.get("quality", "")
+
     stream_name = f"Telegram {resolution} {quality_type}".strip()
+    if provider_name:
+        stream_name = f"🔗 {provider_name} | {resolution} {quality_type}".strip()
 
     stream_title_parts = [
         f"📁 {filename}",
@@ -300,7 +308,21 @@ async def get_streams(media_type: str, id: str):
             quality_str = quality.get('quality', 'HD')
             size = quality.get('size', '')
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+            # --- Generic Provider Detection ---
+            provider_name = None
+            try:
+                decoded = await decode_string(quality.get("id"))
+                provider_type = decoded.get("provider_type")
+                if provider_type:
+                    provider_conf = PROVIDERS.get(provider_type)
+                    provider_name = provider_conf["display_name"] if provider_conf else provider_type.capitalize()
+                elif decoded.get("hubcloud_url"):
+                    provider_name = "HubCloud"
+            except Exception:
+                pass
+            # ---------------------------------
+
+            stream_name, stream_title = format_stream_details(filename, quality_str, size, provider_name)
 
             streams.append({
                 "name": stream_name,

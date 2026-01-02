@@ -12,3 +12,4 @@ USE_DEFAULT_ID: str = None
 db = Database()  
 
 __version__ = "1.5.0"
+from .providers import PROVIDERS, hubcloud_resolver

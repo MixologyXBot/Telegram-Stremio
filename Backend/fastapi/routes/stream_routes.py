@@ -11,6 +11,7 @@ from Backend.helper.custom_dl import ByteStreamer
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
 from Backend.config import Telegram
 from Backend.logger import LOGGER
+from Backend.providers import PROVIDERS
 import httpx
 
 router = APIRouter(tags=["Streaming"])
@@ -43,29 +44,35 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
 async def stream_handler(request: Request, id: str, name: str):
     decoded_data = await decode_string(id)
     
-    # Check for HubCloud URL
-    if decoded_data.get("hubcloud_url"):
-        url = decoded_data["hubcloud_url"]
-        try:
-             async with httpx.AsyncClient() as http_client:
-                response = await http_client.get(
-                    f"{Telegram.SCRAPE_API}/api/hubcloud",
-                    params={"url": url},
-                    timeout=15
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("success") and data.get("data"):
-                        hub_data = data["data"]
-                        # Find first non-null download link
-                        for key, value in hub_data.items():
-                            if key.startswith("Download") and value:
-                                LOGGER.info(f"Redirecting HubCloud stream to: {value}")
-                                return RedirectResponse(url=value)
-        except Exception as e:
-            LOGGER.error(f"Error fetching HubCloud stream for {url}: {e}")
-        
-        raise HTTPException(status_code=404, detail="Stream not found")
+    # Generic Provider Logic
+    provider_type = decoded_data.get("provider_type")
+    provider_url = decoded_data.get("provider_url")
+
+    # Fallback for old HubCloud links
+    if not provider_type and decoded_data.get("hubcloud_url"):
+        provider_type = "hubcloud"
+        provider_url = decoded_data["hubcloud_url"]
+
+    if provider_type and provider_url:
+        provider = PROVIDERS.get(provider_type)
+        if provider:
+            try:
+                 async with httpx.AsyncClient() as http_client:
+                    response = await http_client.get(
+                        f"{Telegram.SCRAPE_API}/api/{provider['api_endpoint']}",
+                        params={"url": provider_url},
+                        timeout=15
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        stream_url = provider["stream_resolver"](data)
+                        if stream_url:
+                            LOGGER.info(f"Redirecting {provider_type} stream to: {stream_url}")
+                            return RedirectResponse(url=stream_url)
+            except Exception as e:
+                LOGGER.error(f"Error fetching {provider_type} stream for {provider_url}: {e}")
+
+            raise HTTPException(status_code=404, detail="Stream not found")
 
 
     if not decoded_data.get("msg_id"):

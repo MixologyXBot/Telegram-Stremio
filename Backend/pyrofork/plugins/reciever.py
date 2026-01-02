@@ -7,6 +7,7 @@ from Backend.config import Telegram
 from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.helper.metadata import metadata
 from Backend.helper.encrypt import encode_string
+from Backend.providers import PROVIDERS
 from pyrogram import filters, Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
@@ -34,76 +35,87 @@ for _ in range(1):
 
 
 @Client.on_message(filters.channel & filters.text)
-async def hubcloud_receive_handler(client: Client, message: Message):
+async def provider_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in Telegram.AUTH_CHANNEL:
         text = message.text or message.caption or ""
-        # Regex to find HubCloud links
-        urls = re.findall(r'https?://hubcloud\.[a-z]+/[^\s]+', text)
         
-        if not urls:
-            return
+        for key, provider in PROVIDERS.items():
+            urls = provider["regex"].findall(text)
 
-        channel = str(message.chat.id).replace("-100", "")
-        msg_id = message.id
+            if not urls:
+                continue
 
-        for url in urls:
-            try:
-                # Fetch HubCloud JSON
-                async with httpx.AsyncClient() as http_client:
-                    response = await http_client.get(
-                        f"{Telegram.SCRAPE_API}/api/hubcloud",
-                        params={"url": url},
-                        timeout=15
-                    )
-                    if response.status_code != 200:
-                        LOGGER.warning(f"Failed to fetch HubCloud metadata for {url}: {response.status_code}")
-                        continue
+            channel = str(message.chat.id).replace("-100", "")
+            msg_id = message.id
+
+            for url in urls:
+                try:
+                    # Fetch Provider JSON
+                    async with httpx.AsyncClient() as http_client:
+                        response = await http_client.get(
+                            f"{Telegram.SCRAPE_API}/api/{provider['api_endpoint']}",
+                            params={"url": url},
+                            timeout=15
+                        )
+                        if response.status_code != 200:
+                            LOGGER.warning(f"Failed to fetch {key} metadata for {url}: {response.status_code}")
+                            continue
+
+                        data = response.json()
+
+                    # Extract file_name and size
+                    if not data.get("success") or not data.get("data"):
+                         LOGGER.warning(f"Invalid {key} response for {url}")
+                         continue
+
+                    provider_data = data["data"]
+                    file_name = provider_data.get("file_name")
+                    size = provider_data.get("size")
                     
-                    data = response.json()
-                
-                # Extract file_name and size
-                if not data.get("success") or not data.get("data"):
-                     LOGGER.warning(f"Invalid HubCloud response for {url}")
-                     continue
-                
-                hub_data = data["data"]
-                file_name = hub_data.get("file_name")
-                size = hub_data.get("size")
-                
-                if not file_name:
-                    LOGGER.warning(f"No file_name found in HubCloud data for {url}")
-                    continue
+                    if not file_name:
+                        LOGGER.warning(f"No file_name found in {key} data for {url}")
+                        continue
 
-                # Generate custom encoded string with the HubCloud URL
-                custom_id_data = {"hubcloud_url": url}
-                encoded_string = await encode_string(custom_id_data)
+                    # Generate custom encoded string with the provider details
+                    # For backward compatibility, we could use 'hubcloud_url' for HubCloud,
+                    # but new system uses generic keys.
+                    # However, stream_routes.py needs to handle both.
+                    # Let's standardise on provider_type/provider_url
+                    custom_id_data = {
+                        "provider_type": key,
+                        "provider_url": url,
+                        # Keep hubcloud_url for hubcloud for legacy reasons if needed,
+                        # but ideally we migrate. For now, let's just use the generic keys
+                        # and update stream_routes to read them.
+                    }
+                    if key == "hubcloud":
+                         custom_id_data["hubcloud_url"] = url
 
-                # Process metadata
-                # Using file_name as title
-                metadata_info = await metadata(
-                    clean_filename(file_name), 
-                    int(channel), 
-                    msg_id, 
-                    encoded_string=encoded_string
-                )
+                    encoded_string = await encode_string(custom_id_data)
 
-                if metadata_info is None:
-                    LOGGER.warning(f"Metadata failed for HubCloud file: {file_name}")
-                    continue
-                
-                # Add to queue
-                # Use file_name as title, size from HubCloud
-                title = remove_urls(file_name)
-                # Ensure extension if missing (optional, but metadata/clean_filename handles some cleaning)
-                # Reciever logic for files adds .mkv if missing, let's keep consistent if needed or just use file_name
-                if not title.endswith(('.mkv', '.mp4')):
-                    title += '.mkv'
+                    # Process metadata
+                    # Using file_name as title
+                    metadata_info = await metadata(
+                        clean_filename(file_name),
+                        int(channel),
+                        msg_id,
+                        encoded_string=encoded_string
+                    )
 
-                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
-                LOGGER.info(f"Queued HubCloud link: {title}")
+                    if metadata_info is None:
+                        LOGGER.warning(f"Metadata failed for {key} file: {file_name}")
+                        continue
 
-            except Exception as e:
-                LOGGER.error(f"Error processing HubCloud link {url}: {e}")
+                    # Add to queue
+                    title = remove_urls(file_name)
+                    if not title.endswith(('.mkv', '.mp4')):
+                        title += '.mkv'
+
+                    await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                    LOGGER.info(f"Queued {key} link: {title}")
+
+                except Exception as e:
+                    LOGGER.error(f"Error processing {key} link {url}: {e}")
 
 
 @Client.on_message(filters.channel & (filters.document | filters.video))
@@ -147,4 +159,3 @@ async def file_receive_handler(client: Client, message: Message):
             )
     else:
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
-        
