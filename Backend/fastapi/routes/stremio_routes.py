@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
+from Backend.helper.encrypt import decode_string
 from Backend import db, __version__
 import PTN
 from datetime import datetime, timezone, timedelta
@@ -70,7 +71,7 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
 
     resolution = parsed.get("resolution", quality)
     quality_type = parsed.get("quality", "")
-    stream_name = f"Telegram {resolution} {quality_type}".strip()
+    stream_name = f"{source} {resolution} {quality_type}".strip()
 
     stream_title_parts = [
         f"📁 {filename}",
@@ -300,7 +301,8 @@ async def get_streams(media_type: str, id: str):
             quality_str = quality.get('quality', 'HD')
             size = quality.get('size', '')
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+            source = (decoded_data.get("provider") or "Telegram").capitalize()
+            stream_name, stream_title = format_stream_details(filename, quality_str, size, source)
 
             streams.append({
                 "name": stream_name,
