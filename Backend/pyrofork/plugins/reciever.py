@@ -34,7 +34,7 @@ for _ in range(1):
     create_task(process_file())
 
 
-@Client.on_message(filters.channel & filters.text)
+@Client.on_message(filters.channel & (filters.text | filters.caption))
 async def link_receive_handler(client: Client, message: Message):
     if str(message.chat.id) not in Telegram.AUTH_CHANNEL:
         return
