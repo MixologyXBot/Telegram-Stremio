@@ -9,4 +9,4 @@ pytz
 tgcrypto
 themoviedb
 uvicorn
-httpx
+beautifulsoup4
