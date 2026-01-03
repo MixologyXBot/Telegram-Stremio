@@ -61,7 +61,6 @@ class GDFlixProvider(BaseProvider):
     name = "GDFlix"
     domains = ("gdflix.", "gdlink.")
     ALLOWED_KEYS = (
-        "Instant DL [10GBPS]",
         "Cloud Download (R2)",
         "PixelDrain DL [20MB/S]",
     )
