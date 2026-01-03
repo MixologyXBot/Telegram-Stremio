@@ -11,7 +11,7 @@ from Backend.helper.providers import detect_provider, SUPPORTED_DOMAINS
 from pyrogram import filters, Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
-from pyrogram.enums.parse_mode import ParseMode
+from pyrogram.enums import ParseMode, MessageEntityType
 import re
 import httpx
 
@@ -40,12 +40,31 @@ async def link_receive_handler(client: Client, message: Message):
         return
 
     text = message.text or message.caption or ""
+    entities = message.entities or message.caption_entities or []
 
-    urls = re.findall(
+    extracted_urls = []
+
+    for entity in entities:
+        if entity.type == MessageEntityType.TEXT_LINK:
+            extracted_urls.append(entity.url)
+        elif entity.type == MessageEntityType.URL:
+            offset = entity.offset
+            length = entity.length
+            extracted_urls.append(text[offset:offset+length])
+
+    regex_urls = re.findall(
         rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+',
         text
     )
+    extracted_urls.extend(regex_urls)
+
+    domain_pattern = re.compile(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+')
     
+    urls = []
+    for url in set(extracted_urls):
+        if domain_pattern.match(url):
+            urls.append(url)
+
     if not urls:
         return
 
