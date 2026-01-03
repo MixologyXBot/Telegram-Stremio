@@ -61,18 +61,10 @@ class GDFlixProvider(BaseProvider):
     name = "GDFlix"
     domains = ("gdflix.", "gdlink.")
     ALLOWED_KEYS = (
+        "Instant DL [10GBPS]",
         "Cloud Download (R2)",
         "PixelDrain DL [20MB/S]",
-        "Instant DL [10GBPS]",
     )
-
-    #@classmethod
-    #def extract_links(cls, data: dict) -> dict:
-        #links = super().extract_links(data)
-        #for key, link in links.items():
-            #if "pixeldrain" in link and "/u/" in link:
-                #links[key] = link.replace("/u/", "/api/file/")
-        #return links
 
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
