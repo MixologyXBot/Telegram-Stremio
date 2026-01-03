@@ -1,4 +1,5 @@
 aiofiles
+beautifulsoup4
 fastapi
 httpx
 motor
@@ -9,4 +10,3 @@ pytz
 tgcrypto
 themoviedb
 uvicorn
-httpx
