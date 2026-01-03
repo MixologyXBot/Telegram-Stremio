@@ -305,10 +305,9 @@ class Database:
                     old_id = q.get("id")
                     if old_id:
                         decoded = await decode_string(old_id)
-                        if isinstance(decoded, dict) and decoded.get("chat_id") and decoded.get("msg_id"):
-                            chat_id = int(f"-100{decoded['chat_id']}")
-                            msg_id = int(decoded['msg_id'])
-                            create_task(delete_message(chat_id, msg_id))
+                        chat_id = int(f"-100{decoded['chat_id']}")
+                        msg_id = int(decoded['msg_id'])
+                        create_task(delete_message(chat_id, msg_id))
                 except Exception as e:
                     LOGGER.error(f"Failed to delete old quality: {e}")
 
@@ -433,10 +432,9 @@ class Database:
                                 old_id = q.get("id")
                                 if old_id:
                                     decoded = await decode_string(old_id)
-                                    if isinstance(decoded, dict) and decoded.get("chat_id") and decoded.get("msg_id"):
-                                        chat_id = int(f"-100{decoded['chat_id']}")
-                                        msg_id = int(decoded['msg_id'])
-                                        create_task(delete_message(chat_id, msg_id))
+                                    chat_id = int(f"-100{decoded['chat_id']}")
+                                    msg_id = int(decoded['msg_id'])
+                                    create_task(delete_message(chat_id, msg_id))
                             except Exception as e:
                                 LOGGER.error(f"Failed to delete old quality: {e}")
 
@@ -722,10 +720,9 @@ class Database:
                         old_id = quality.get("id")
                         if old_id:
                             decoded_data = await decode_string(old_id)
-                            if isinstance(decoded_data, dict) and decoded_data.get("chat_id") and decoded_data.get("msg_id"):
-                                chat_id = int(f"-100{decoded_data['chat_id']}")
-                                msg_id = int(decoded_data['msg_id'])
-                                create_task(delete_message(chat_id, msg_id))
+                            chat_id = int(f"-100{decoded_data['chat_id']}")
+                            msg_id = int(decoded_data['msg_id'])
+                            create_task(delete_message(chat_id, msg_id))
                     except Exception as e:
                         LOGGER.error(f"Failed to queue file for deletion: {e}")
             
@@ -740,10 +737,9 @@ class Database:
                                 old_id = quality.get("id")
                                 if old_id:
                                     decoded_data = await decode_string(old_id)
-                                    if isinstance(decoded_data, dict) and decoded_data.get("chat_id") and decoded_data.get("msg_id"):
-                                        chat_id = int(f"-100{decoded_data['chat_id']}")
-                                        msg_id = int(decoded_data['msg_id'])
-                                        create_task(delete_message(chat_id, msg_id))
+                                    chat_id = int(f"-100{decoded_data['chat_id']}")
+                                    msg_id = int(decoded_data['msg_id'])
+                                    create_task(delete_message(chat_id, msg_id))
                             except Exception as e:
                                 LOGGER.error(f"Failed to queue file for deletion: {e}")
             
@@ -768,10 +764,9 @@ class Database:
                     old_id = q.get("id")
                     if old_id:
                         decoded_data = await decode_string(old_id)
-                        if isinstance(decoded_data, dict) and decoded_data.get("chat_id") and decoded_data.get("msg_id"):
-                            chat_id = int(f"-100{decoded_data['chat_id']}")
-                            msg_id = int(decoded_data['msg_id'])
-                            create_task(delete_message(chat_id, msg_id))
+                        chat_id = int(f"-100{decoded_data['chat_id']}")
+                        msg_id = int(decoded_data['msg_id'])
+                        create_task(delete_message(chat_id, msg_id))
                 except Exception as e:
                     LOGGER.error(f"Failed to queue file for deletion: {e}")
                 break
@@ -803,10 +798,9 @@ class Database:
                                 old_id = quality.get("id")
                                 if old_id:
                                     decoded_data = await decode_string(old_id)
-                                    if isinstance(decoded_data, dict) and decoded_data.get("chat_id") and decoded_data.get("msg_id"):
-                                        chat_id = int(f"-100{decoded_data['chat_id']}")
-                                        msg_id = int(decoded_data['msg_id'])
-                                        create_task(delete_message(chat_id, msg_id))
+                                    chat_id = int(f"-100{decoded_data['chat_id']}")
+                                    msg_id = int(decoded_data['msg_id'])
+                                    create_task(delete_message(chat_id, msg_id))
                             except Exception as e:
                                 LOGGER.error(f"Failed to queue file for deletion: {e}")
                         break
@@ -838,10 +832,9 @@ class Database:
                             old_id = quality.get("id")
                             if old_id:
                                 decoded_data = await decode_string(old_id)
-                                if isinstance(decoded_data, dict) and decoded_data.get("chat_id") and decoded_data.get("msg_id"):
-                                    chat_id = int(f"-100{decoded_data['chat_id']}")
-                                    msg_id = int(decoded_data['msg_id'])
-                                    create_task(delete_message(chat_id, msg_id))
+                                chat_id = int(f"-100{decoded_data['chat_id']}")
+                                msg_id = int(decoded_data['msg_id'])
+                                create_task(delete_message(chat_id, msg_id))
                         except Exception as e:
                             LOGGER.error(f"Failed to queue file for deletion: {e}")
                 break
@@ -874,10 +867,9 @@ class Database:
                                     old_id = q.get("id")
                                     if old_id:
                                         decoded_data = await decode_string(old_id)
-                                        if isinstance(decoded_data, dict) and decoded_data.get("chat_id") and decoded_data.get("msg_id"):
-                                            chat_id = int(f"-100{decoded_data['chat_id']}")
-                                            msg_id = int(decoded_data['msg_id'])
-                                            create_task(delete_message(chat_id, msg_id))
+                                        chat_id = int(f"-100{decoded_data['chat_id']}")
+                                        msg_id = int(decoded_data['msg_id'])
+                                        create_task(delete_message(chat_id, msg_id))
                                 except Exception as e:
                                     LOGGER.error(f"Failed to queue file for deletion: {e}")
                                 break
