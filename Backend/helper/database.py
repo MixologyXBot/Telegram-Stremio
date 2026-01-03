@@ -176,7 +176,8 @@ class Database:
 
     async def insert_media(
         self, metadata_info: dict,
-        channel: int, msg_id: int, size: str, name: str
+        channel: int, msg_id: int, size: str, name: str,
+        replace_mode: bool = Telegram.REPLACE_MODE
     ) -> Optional[ObjectId]:
         
         if metadata_info['media_type'] == "movie":
@@ -202,7 +203,7 @@ class Database:
                     size=size
                 )]
             )
-            return await self.update_movie(media)
+            return await self.update_movie(media, replace_mode=replace_mode)
         else:
             tv_show = TVShowSchema(
                 tmdb_id=metadata_info['tmdb_id'],
@@ -236,9 +237,9 @@ class Database:
                     )]
                 )]
             )
-            return await self.update_tv_show(tv_show)
+            return await self.update_tv_show(tv_show, replace_mode=replace_mode)
 
-    async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
+    async def update_movie(self, movie_data: MovieSchema, replace_mode: bool = Telegram.REPLACE_MODE) -> Optional[ObjectId]:
         try:
             movie_dict = movie_data.dict()
         except ValidationError as e:
@@ -296,7 +297,7 @@ class Database:
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
 
-        if Telegram.REPLACE_MODE:
+        if replace_mode:
             # delete all same-quality entries
             to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
 
@@ -341,7 +342,7 @@ class Database:
             if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                 return await self._handle_storage_error(self.update_movie, movie_data, total_storage_dbs=total_storage_dbs)
 
-    async def update_tv_show(self, tv_show_data: TVShowSchema) -> Optional[ObjectId]:
+    async def update_tv_show(self, tv_show_data: TVShowSchema, replace_mode: bool = Telegram.REPLACE_MODE) -> Optional[ObjectId]:
         try:
             tv_show_dict = tv_show_data.dict()
         except ValidationError as e:
@@ -422,7 +423,7 @@ class Database:
                 for quality in episode["telegram"]:
                     target_quality = quality.get("quality")
 
-                    if Telegram.REPLACE_MODE:
+                    if replace_mode:
                         to_delete = [
                             q for q in existing_episode["telegram"]
                             if q.get("quality") == target_quality

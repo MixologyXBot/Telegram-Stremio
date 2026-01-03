@@ -21,9 +21,9 @@ db_lock = Lock()
 
 async def process_file():
     while True:
-        metadata_info, channel, msg_id, size, title = await file_queue.get()
+        metadata_info, channel, msg_id, size, title, replace_mode = await file_queue.get()
         async with db_lock:
-            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, name=title)
+            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, name=title, replace_mode=replace_mode)
             if updated_id:
                 LOGGER.info(f"{metadata_info['media_type']} updated with ID: {updated_id}")
             else:
@@ -91,7 +91,7 @@ async def link_receive_handler(client: Client, message: Message):
                 title += ".mkv"
 
             await file_queue.put(
-                (metadata_info, channel, msg_id, size, title)
+                (metadata_info, channel, msg_id, size, title, False)
             )
 
             LOGGER.info(f"Queued {provider.name} link: {title}")
@@ -127,7 +127,7 @@ async def file_receive_handler(client: Client, message: Message):
                         new_caption=new_caption
                     ))
 
-                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                await file_queue.put((metadata_info, int(channel), msg_id, size, title, Telegram.REPLACE_MODE))
             else:
                 await message.reply_text("> Not supported")
         except FloodWait as e:
