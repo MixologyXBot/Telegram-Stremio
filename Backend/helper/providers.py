@@ -2,6 +2,18 @@ import httpx
 from Backend.config import Telegram
 
 
+async def supports_range(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=10,
+        ) as client:
+            response = await client.head(url)
+            return "bytes" in response.headers.get("accept-ranges", "").lower()
+    except Exception:
+        return False
+
+
 class BaseProvider:
     name = ""
     domains = ()
@@ -50,10 +62,17 @@ class HubCloudProvider(BaseProvider):
                 return None
 
             data = response_json.get("data", {})
+            links = cls.extract_links(data)
+
+            streamable_links = {}
+            for label, link in links.items():
+                if await supports_range(link):
+                    streamable_links[label] = link
+
             return {
                 "file_name": data.get("file_name"),
                 "size": data.get("size"),
-                "links": cls.extract_links(data),
+                "links": streamable_links or links,
             }
 
 
@@ -61,9 +80,9 @@ class GDFlixProvider(BaseProvider):
     name = "GDFlix"
     domains = ("gdflix.", "gdlink.")
     ALLOWED_KEYS = (
-        "Instant DL [10GBPS]",
         "Cloud Download (R2)",
         "PixelDrain DL [20MB/S]",
+        "Instant DL [10GBPS]",  # download-only (no range support)
     )
 
     @classmethod
@@ -83,11 +102,19 @@ class GDFlixProvider(BaseProvider):
                 return None
 
             data = response_json.get("data", {})
+            links = cls.extract_links(data)
+
+            streamable_links = {}
+            for label, link in links.items():
+                if await supports_range(link):
+                    streamable_links[label] = link
+
             return {
                 "file_name": data.get("file_name"),
                 "size": data.get("size"),
-                "links": cls.extract_links(data),
+                "links": streamable_links or links,
             }
+
 
 PROVIDERS = (
     HubCloudProvider,
