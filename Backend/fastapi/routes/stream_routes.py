@@ -18,6 +18,15 @@ router = APIRouter(tags=["Streaming"])
 class_cache = {}
 
 
+async def supports_range(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.head(url, follow_redirects=True, timeout=5)
+            return response.headers.get("Accept-Ranges") == "bytes"
+    except Exception:
+        return False
+
+
 def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
     if not range_header:
         return 0, file_size - 1
@@ -57,7 +66,15 @@ async def stream_handler(request: Request, id: str, name: str):
         if not result or not result.get("links"):
             raise HTTPException(status_code=404, detail="Stream not found")
 
-        stream_url = next(iter(result["links"].values()))
+        stream_url = None
+        for link in result["links"].values():
+            if await supports_range(link):
+                stream_url = link
+                break
+
+        if not stream_url:
+            raise HTTPException(status_code=404, detail="No streamable source found")
+
         LOGGER.info(f"Redirecting {provider.name} stream → {stream_url}")
 
         return RedirectResponse(url=stream_url)
