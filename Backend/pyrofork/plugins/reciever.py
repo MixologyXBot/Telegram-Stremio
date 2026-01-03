@@ -34,35 +34,17 @@ for _ in range(1):
     create_task(process_file())
 
 
-
-DOMAIN_REGEX = re.compile(
-    rf'https?://(?:[^\s/]+\.)*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})/[^\s]+'
-)
-
-def extract_urls(message):
-    text = message.text or message.caption or ""
-    urls = []
-    
-    for ent in (message.entities or []) + (message.caption_entities or []):
-        if ent.type == "text_link":
-            urls.append(ent.url)
-        elif ent.type == "url":
-            urls.append(text[ent.offset : ent.offset + ent.length])
-
-    # 2️⃣ Plain text fallback
-    urls += re.findall(r'https?://[^\s]+', text)
-
-    # 3️⃣ Regex validation + dedupe
-    return list(dict.fromkeys(u for u in urls if DOMAIN_REGEX.match(u)))
-
-
-
 @Client.on_message(filters.channel & (filters.text | filters.caption))
 async def link_receive_handler(client: Client, message: Message):
     if str(message.chat.id) not in Telegram.AUTH_CHANNEL:
         return
 
-    urls = extract_urls(message)
+    text = message.text or message.caption or ""
+
+    urls = re.findall(
+        rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+',
+        text
+    )
     
     if not urls:
         return
