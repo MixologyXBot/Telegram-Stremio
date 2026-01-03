@@ -6,10 +6,14 @@ from Backend import db
 from Backend.config import Telegram
 from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.helper.metadata import metadata
+from Backend.helper.encrypt import encode_string
+from Backend.helper.providers import detect_provider, SUPPORTED_DOMAINS
 from pyrogram import filters, Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 from pyrogram.enums.parse_mode import ParseMode
+import re
+import httpx
 
 
 file_queue = Queue()
@@ -29,6 +33,43 @@ async def process_file():
 for _ in range(1):
     create_task(process_file())
 
+
+@Client.on_message(filters.channel & (filters.text | filters.caption))
+async def link_receive_handler(client: Client, message: Message):
+    if str(message.chat.id) not in Telegram.AUTH_CHANNEL:
+        return
+
+    text = message.text or message.caption or ""
+
+    urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', text)
+    if not urls:
+        return
+
+    channel = int(str(message.chat.id).replace("-100", ""))
+    msg_id = message.id
+
+    for url in urls:
+        try:
+            provider = detect_provider(url)
+            result = await provider.fetch(url)
+            
+            title = result["file_name"]
+            size = result["size"]
+            
+            encoded_string = await encode_string({
+                "provider": provider.name,
+                "url": url,
+            })
+            
+            metadata_info = await metadata(clean_filename(title), channel, msg_id, encoded_string=encoded_string)
+            if not metadata_info:
+                LOGGER.warning(f"Metadata failed for {provider.name} link: {title}")
+                return
+            
+            await file_queue.put((metadata_info, channel, msg_id, size, title))
+        
+        except Exception as e:
+            LOGGER.error(f"Error processing {url}: {e}")
 
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
