@@ -42,7 +42,7 @@ async def link_receive_handler(client: Client, message: Message):
     text = message.text or message.caption or ""
 
     urls = re.findall(
-        rf'https?://(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+',
+        rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+',
         text
     )
 
