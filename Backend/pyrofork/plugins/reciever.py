@@ -34,12 +34,25 @@ for _ in range(1):
     create_task(process_file())
 
 
+def extract_size_from_text(text: str) -> str | None:
+    match = re.search(
+        r"(?:size\s*:\s*)?([\d.]+)\s*(TB|GB|MB|KB)",
+        text,
+        re.IGNORECASE
+    )
+    if not match:
+        return None
+
+    value, unit = match.groups()
+    return f"{float(value):.2f}{unit.upper()}"
+
+
 @Client.on_message(filters.channel & (filters.text | filters.caption))
 async def link_receive_handler(client: Client, message: Message):
     if str(message.chat.id) not in Telegram.AUTH_CHANNEL:
         return
 
-    text = message.text or message.caption or ""
+    text = message.text or message.caption
 
     urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', text)
     if not urls:
@@ -53,8 +66,10 @@ async def link_receive_handler(client: Client, message: Message):
             provider = detect_provider(url)
             result = await provider.fetch(url)
             
-            title = result["file_name"]
-            size = result["size"]
+            title = text
+            title = remove_urls(title)
+            title = title.splitlines()[0].strip()
+            size = extract_size_from_text(text)
             
             encoded_string = await encode_string({
                 "provider": provider.name,
