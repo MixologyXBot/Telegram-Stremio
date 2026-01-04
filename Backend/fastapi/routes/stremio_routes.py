@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
-from Backend.helper.encrypt import decode_string
+from Backend.helper.encrypt import decode_string, encode_string
+from Backend.helper.providers import detect_provider
 from Backend import db, __version__
 import PTN
 from datetime import datetime, timezone, timedelta
@@ -273,6 +274,35 @@ async def get_meta(media_type: str, id: str):
 
 @router.get("/stream/{media_type}/{id}.json")
 async def get_streams(media_type: str, id: str):
+    decoded_id = unquote(id)
+    provider = detect_provider(decoded_id)
+
+    if provider:
+        data = await provider.fetch(decoded_id)
+        if not data:
+            return {"streams": []}
+
+        streams = []
+        filename = data.get("file_name", "Unknown")
+        size = data.get("size", "Unknown")
+        stream_title = f"📁 {filename}\n💾 {size}"
+
+        for link_name, _ in data.get("links", {}).items():
+            encoded_data = {
+                "provider": provider.name,
+                "url": decoded_id,
+                "link_name": link_name,
+            }
+            encoded_id = await encode_string(encoded_data)
+
+            streams.append({
+                "name": f"{provider.name} ({link_name})",
+                "title": stream_title,
+                "url": f"{BASE_URL}/dl/{encoded_id}/video.mkv"
+            })
+
+        return {"streams": streams}
+
     try:
         parts = id.split(":")
         base_id = parts[0]

@@ -57,7 +57,12 @@ async def stream_handler(request: Request, id: str, name: str):
         if not result or not result.get("links"):
             raise HTTPException(status_code=404, detail="Stream not found")
 
-        stream_url = next(iter(result["links"].values()))
+        target_link = decoded_data.get("link_name")
+        if target_link and target_link in result["links"]:
+            stream_url = result["links"][target_link]
+        else:
+            stream_url = next(iter(result["links"].values()))
+
         LOGGER.info(f"Redirecting {provider.name} stream → {stream_url}")
 
         return RedirectResponse(url=stream_url)
