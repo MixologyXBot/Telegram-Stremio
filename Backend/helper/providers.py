@@ -1,5 +1,4 @@
 import httpx
-from urllib.parse import quote
 from Backend.config import Telegram
 
 
@@ -46,18 +45,10 @@ class GDFlixProvider(BaseProvider):
     name = "GDFlix"
     domains = ("gdflix.", "gdlink.")
     ALLOWED_KEYS = (
-        "Instant DL [10GBPS]",
         "PixelDrain DL [20MB/S]",
         "Cloud Download (R2)",
         "Cloud Resume Download",
     )
-
-    @classmethod
-    def extract_links(cls, data: dict) -> dict:
-        links = super().extract_links(data)
-        if "Instant DL [10GBPS]" in links and data.get("file_name"):
-            links["Instant DL [10GBPS]"] += f"?filename={quote(data['file_name'])}"
-        return links
 
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
