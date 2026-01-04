@@ -40,9 +40,23 @@ class HubCloudProvider(BaseProvider):
             if not final_url:
                 return None
 
+            size = None
+            try:
+                head = await http_client.head(final_url, timeout=10, follow_redirects=True)
+                cl = head.headers.get("Content-Length")
+                if cl and cl.isdigit():
+                    s = int(cl)
+                    for unit in ["B", "KB", "MB", "GB", "TB"]:
+                        if s < 1024:
+                            size = f"{s:.2f} {unit}"
+                            break
+                        s /= 1024
+            except Exception:
+                pass
+
             return {
                 "file_name": None,
-                "size": None,
+                "size": size,
                 "links": {"Direct Download": final_url},
             }
 
