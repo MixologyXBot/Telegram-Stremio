@@ -66,10 +66,14 @@ async def link_receive_handler(client: Client, message: Message):
             provider = detect_provider(url)
             result = await provider.fetch(url)
             
-            title = text
-            title = remove_urls(title)
-            title = title.splitlines()[0].strip()
-            size = extract_size_from_text(text)
+            if provider.name == "GDFlix":
+                title = result.get("file_name")
+                size = result.get("size")
+            else:
+                title = text
+                title = remove_urls(title)
+                title = title.splitlines()[0].strip()
+                size = extract_size_from_text(text)
             
             encoded_string = await encode_string({
                 "provider": provider.name,
