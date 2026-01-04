@@ -26,22 +26,18 @@ class HubCloudProvider(BaseProvider):
 
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
-        async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(
+        async with httpx.AsyncClient(follow_redirects=False, timeout=30) as client:
+            response = await client.get(
                 Telegram.HUBCLOUD_API,
                 params={"url": url},
-                timeout=30,
             )
 
-            if response.status_code != 200:
-                return None
-
-            final_url = response.text.strip()
+            final_url = response.headers.get("location")
             if not final_url:
                 return None
 
             return {
-                "links": {"Direct Download": final_url},
+                "links": {"Direct Download": final_url}
             }
 
 
