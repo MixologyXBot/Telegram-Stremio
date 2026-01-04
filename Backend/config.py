@@ -15,7 +15,7 @@ class Telegram:
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
     SCRAPE_API = (getenv("SCRAPE_API") or getenv("SCRAPE_URL", "")).rstrip('/')
-    HUBCLOUD_API = getenv("HUBCLOUD_API", "").rstrip('/')
+    HUBCLOUD_API = getenv("HUBCLOUD_API", "https://hubcloud-api.hdmovielover.workers.dev/download").rstrip('/')
 
     TMDB_API = getenv("TMDB_API", "")
 
