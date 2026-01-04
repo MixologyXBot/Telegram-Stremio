@@ -23,45 +23,25 @@ class BaseProvider:
 class HubCloudProvider(BaseProvider):
     name = "HubCloud"
     domains = ("hubcloud.",)
-    ALLOWED_KEYS = (
-        "Download [PixelServer:2]",
-        "Download [PixelServer : 2]",
-        "Download File",
-        "Download [FSL Server]",
-        "Download [FSLv2 Server]",
-        "Download [Server : 10Gbps]",
-        "Download [ZipDisk Server]",
-    )
-
-    @classmethod
-    def extract_links(cls, data: dict) -> dict:
-        links = super().extract_links(data)
-        for key, link in links.items():
-            if "pixeldrain" in link and "/u/" in link:
-                links[key] = link.replace("/u/", "/api/file/")
-        return links
 
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
         async with httpx.AsyncClient() as http_client:
             response = await http_client.get(
-                f"{Telegram.SCRAPE_API}/api/hubcloud",
+                Telegram.HUBCLOUD_API,
                 params={"url": url},
-                timeout=15,
+                timeout=30,
             )
 
             if response.status_code != 200:
                 return None
 
-            response_json = response.json()
-            if not response_json.get("success"):
+            final_url = response.text.strip()
+            if not final_url:
                 return None
 
-            data = response_json.get("data", {})
             return {
-                "file_name": data.get("file_name"),
-                "size": data.get("size"),
-                "links": cls.extract_links(data),
+                "links": {"Direct Download": final_url},
             }
 
 
@@ -96,6 +76,7 @@ class GDFlixProvider(BaseProvider):
                 "size": data.get("size"),
                 "links": cls.extract_links(data),
             }
+
 
 PROVIDERS = (
     HubCloudProvider,
