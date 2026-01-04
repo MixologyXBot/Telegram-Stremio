@@ -27,16 +27,23 @@ class HubCloudProvider(BaseProvider):
     @classmethod
     async def fetch(cls, url: str) -> dict | None:
         async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(
-                Telegram.HUBCLOUD_API,
-                params={"url": url},
-                timeout=30,
-            )
-
-            if response.status_code != 200:
+            try:
+                response = await http_client.get(
+                    Telegram.HUBCLOUD_API,
+                    params={"url": url},
+                    timeout=30,
+                    follow_redirects=False,
+                )
+            except Exception:
                 return None
 
-            final_url = response.text.strip()
+            if response.status_code == 200:
+                final_url = response.text.strip()
+            elif response.status_code in (301, 302, 303, 307, 308):
+                final_url = response.headers.get("Location")
+            else:
+                return None
+
             if not final_url:
                 return None
 
