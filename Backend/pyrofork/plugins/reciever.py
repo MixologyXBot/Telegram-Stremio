@@ -75,6 +75,17 @@ async def file_receive_handler(client: Client, message: Message):
                 if message.video or (message.document and message.document.mime_type.startswith("video/")):
                     file = message.video or message.document
                     title = message.caption or file.file_name
+
+                    if title:
+                        match = re.search(r'(?s)(.*?\.(?:mkv|mp4))', title, re.IGNORECASE)
+                        if match:
+                            title = match.group(1).strip()
+                            create_task(edit_message(
+                                chat_id=message.chat.id,
+                                msg_id=message.id,
+                                new_caption=title
+                            ))
+
                     msg_id = message.id
                     size = get_readable_file_size(file.file_size)
                     channel = str(message.chat.id).replace("-100", "")
@@ -87,14 +98,6 @@ async def file_receive_handler(client: Client, message: Message):
                     title = remove_urls(title)
                     if not title.endswith(('.mkv', '.mp4')):
                         title += '.mkv'
-
-                    if Backend.USE_DEFAULT_ID:
-                        new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
-                        create_task(edit_message(
-                            chat_id=message.chat.id,
-                            msg_id=message.id,
-                            new_caption=new_caption
-                        ))
 
                     await file_queue.put((metadata_info, int(channel), msg_id, size, title))
                 else:
