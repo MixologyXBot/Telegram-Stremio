@@ -38,76 +38,74 @@ for _ in range(1):
 @Client.on_message(filters.channel & (filters.document | filters.video | filters.text | filters.caption))
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in Telegram.AUTH_CHANNEL:
-        try:
-            urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', message.text or message.caption)
-            if not urls:
-                return
+        urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', message.text or message.caption)
+
+        if urls:
             msg_id = message.id
             channel = str(message.chat.id).replace("-100", "")
 
             for url in urls:
-                provider = detect_provider(url)
-                result = await provider.fetch(url)
-                
-                title = result.get("file_name") or ((m := re.search(r'.*?\.(?:mkv|mp4)', message.text or message.caption, re.IGNORECASE)) and m.group(0))
-                size = result.get("size") or ((m := re.search(r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)', message.text or message.caption, re.IGNORECASE)) and f"{float(m.group(1)):.2f}{m.group(2).upper()}")
-
-                if not title and size:
-                    LOGGER.error(f"Title or Size not available for URL: {url}")
-                    return
-    
-                encoded_string = await encode_string({
-                    "provider": provider.name,
-                    "url": url,
-                })
-                
-                metadata_info = await metadata(clean_filename(title), int(channel), msg_id, encoded_string=encoded_string)
-                if not metadata_info:
-                    LOGGER.warning(f"Metadata failed for {provider.name} (link: {title})")
-                    return
+                try:
+                    provider = detect_provider(url)
+                    result = await provider.fetch(url)
                     
-                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
-            return
+                    title = result.get("file_name") or ((m := re.search(r'.*?\.(?:mkv|mp4)', message.text or message.caption, re.IGNORECASE)) and m.group(0))
+                    size = result.get("size") or ((m := re.search(r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)', message.text or message.caption, re.IGNORECASE)) and f"{float(m.group(1)):.2f}{m.group(2).upper()}")
+
+                    if not title and size:
+                        LOGGER.error(f"Title or Size not available for URL: {url}")
+                        continue
         
-        except Exception as e:
-            LOGGER.error(f"Error processing {url}: {e}")
-            
-        try:
-            if message.video or (message.document and message.document.mime_type.startswith("video/")):
-                file = message.video or message.document
-                title = message.caption or file.file_name
-                msg_id = message.id
-                size = get_readable_file_size(file.file_size)
-                channel = str(message.chat.id).replace("-100", "")
+                    encoded_string = await encode_string({
+                        "provider": provider.name,
+                        "url": url,
+                    })
 
-                metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
-                if metadata_info is None:
-                    LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
-                    return
+                    metadata_info = await metadata(clean_filename(title), int(channel), msg_id, encoded_string=encoded_string)
+                    if not metadata_info:
+                        LOGGER.warning(f"Metadata failed for {provider.name} (link: {title})")
+                        continue
 
-                title = remove_urls(title)
-                if not title.endswith(('.mkv', '.mp4')):
-                    title += '.mkv'
+                    await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                except Exception as e:
+                    LOGGER.error(f"Error processing {url}: {e}")
 
-                if Backend.USE_DEFAULT_ID:
-                    new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
-                    create_task(edit_message(
-                        chat_id=message.chat.id,
-                        msg_id=message.id,
-                        new_caption=new_caption
-                    ))
+        else:
+            try:
+                if message.video or (message.document and message.document.mime_type.startswith("video/")):
+                    file = message.video or message.document
+                    title = message.caption or file.file_name
+                    msg_id = message.id
+                    size = get_readable_file_size(file.file_size)
+                    channel = str(message.chat.id).replace("-100", "")
 
-                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
-            else:
-                await message.reply_text("> Not supported")
-        except FloodWait as e:
-            LOGGER.info(f"Sleeping for {str(e.value)}s")
-            await asleep(e.value)
-            await message.reply_text(
-                text=f"Got Floodwait of {str(e.value)}s",
-                disable_web_page_preview=True,
-                parse_mode=ParseMode.MARKDOWN
-            )
+                    metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
+                    if metadata_info is None:
+                        LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
+                        return
+
+                    title = remove_urls(title)
+                    if not title.endswith(('.mkv', '.mp4')):
+                        title += '.mkv'
+
+                    if Backend.USE_DEFAULT_ID:
+                        new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
+                        create_task(edit_message(
+                            chat_id=message.chat.id,
+                            msg_id=message.id,
+                            new_caption=new_caption
+                        ))
+
+                    await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                else:
+                    await message.reply_text("> Not supported")
+            except FloodWait as e:
+                LOGGER.info(f"Sleeping for {str(e.value)}s")
+                await asleep(e.value)
+                await message.reply_text(
+                    text=f"Got Floodwait of {str(e.value)}s",
+                    disable_web_page_preview=True,
+                    parse_mode=ParseMode.MARKDOWN
+                )
     else:
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
-        
