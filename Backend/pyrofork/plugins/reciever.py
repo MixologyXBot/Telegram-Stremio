@@ -74,25 +74,7 @@ async def file_receive_handler(client: Client, message: Message):
             try:
                 if message.video or (message.document and message.document.mime_type.startswith("video/")):
                     file = message.video or message.document
-                    title = message.caption or file.file_name
-
-                    caption_text = message.caption
-                    match = None
-                    if title:
-                        match = re.search(r'(?s)(.*?\.(?:mkv|mp4))', title, re.IGNORECASE)
-                        if match:
-                            title = match.group(1).strip()
-                            caption_text = title
-
-                    if match or Backend.USE_DEFAULT_ID:
-                        if Backend.USE_DEFAULT_ID:
-                            caption_text = (caption_text + "\n\n" + Backend.USE_DEFAULT_ID) if caption_text else Backend.USE_DEFAULT_ID
-
-                        create_task(edit_message(
-                            chat_id=message.chat.id,
-                            msg_id=message.id,
-                            new_caption=caption_text
-                        ))
+                    title = message.caption or file.file_name or ""
 
                     msg_id = message.id
                     size = get_readable_file_size(file.file_size)
@@ -103,11 +85,26 @@ async def file_receive_handler(client: Client, message: Message):
                         LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
                         return
 
-                    title = remove_urls(title)
-                    if not title.endswith(('.mkv', '.mp4')):
-                        title += '.mkv'
+                    final_title = title
+                    if not final_title.lower().endswith(('.mkv', '.mp4')):
+                        match = re.search(r'(?s)(.*?\.(?:mkv|mp4))', title, re.IGNORECASE)
+                        if match:
+                            final_title = match.group(1).strip()
+                        else:
+                            final_title = remove_urls(final_title)
+                            final_title += '.mkv'
 
-                    await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                    caption_text = final_title
+                    if Backend.USE_DEFAULT_ID:
+                        caption_text = (caption_text + "\n\n" + Backend.USE_DEFAULT_ID)
+
+                    create_task(edit_message(
+                        chat_id=message.chat.id,
+                        msg_id=message.id,
+                        new_caption=caption_text
+                    ))
+
+                    await file_queue.put((metadata_info, int(channel), msg_id, size, final_title))
                 else:
                     await message.reply_text("> Not supported")
             except FloodWait as e:
