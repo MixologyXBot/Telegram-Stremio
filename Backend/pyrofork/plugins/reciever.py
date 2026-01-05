@@ -34,65 +34,44 @@ for _ in range(1):
     create_task(process_file())
 
 
-def extract_size_from_text(text: str) -> str | None:
-    match = re.search(
-        r"(?:size\s*:\s*)?([\d.]+)\s*(TB|GB|MB|KB)",
-        text,
-        re.IGNORECASE
-    )
-    if not match:
-        return None
 
-    value, unit = match.groups()
-    return f"{float(value):.2f}{unit.upper()}"
-
-
-@Client.on_message(filters.channel & (filters.text | filters.caption))
-async def link_receive_handler(client: Client, message: Message):
-    if str(message.chat.id) not in Telegram.AUTH_CHANNEL:
-        return
-
-    text = message.text or message.caption
-
-    urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', text)
-    if not urls:
-        return
-
-    channel = int(str(message.chat.id).replace("-100", ""))
-    msg_id = message.id
-
-    for url in urls:
+@Client.on_message(filters.channel & (filters.document | filters.video | filters.text | filters.caption))
+async def file_receive_handler(client: Client, message: Message):
+    if str(message.chat.id) in Telegram.AUTH_CHANNEL:
         try:
-            provider = detect_provider(url)
-            result = await provider.fetch(url)
-            
-            if provider.name == "GDFlix":
-                title = result.get("file_name")
-                size = result.get("size")
-            else:
-                title = text
-                title = remove_urls(title)
-                title = title.splitlines()[0].strip()
-                size = extract_size_from_text(text)
-            
-            encoded_string = await encode_string({
-                "provider": provider.name,
-                "url": url,
-            })
-            
-            metadata_info = await metadata(clean_filename(title), channel, msg_id, encoded_string=encoded_string)
-            if not metadata_info:
-                LOGGER.warning(f"Metadata failed for {provider.name} link: {title}")
+            urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', message.text or message.caption)
+            if not urls:
                 return
-            
-            await file_queue.put((metadata_info, channel, msg_id, size, title))
+            msg_id = message.id
+            channel = str(message.chat.id).replace("-100", "")
+
+            for url in urls:
+                provider = detect_provider(url)
+                result = await provider.fetch(url)
+                
+                title = result.get("file_name") or ((m := re.search(r'.*?\.(?:mkv|mp4)', message.text or message.caption, re.IGNORECASE)) and m.group(0))
+                size = result.get("size") or ((m := re.search(r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)', message.text or message.caption, re.IGNORECASE)) and f"{float(m.group(1)):.2f}{m.group(2).upper()}")
+
+                if not title and size:
+                    LOGGER.error(f"Title or Size not available for URL: {url}")
+                    return
+    
+                encoded_string = await encode_string({
+                    "provider": provider.name,
+                    "url": url,
+                })
+                
+                metadata_info = await metadata(clean_filename(title), int(channel), msg_id, encoded_string=encoded_string)
+                if not metadata_info:
+                    LOGGER.warning(f"Metadata failed for {provider.name} (link: {title})")
+                    return
+                    
+                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+            return
         
         except Exception as e:
             LOGGER.error(f"Error processing {url}: {e}")
-
-@Client.on_message(filters.channel & (filters.document | filters.video))
-async def file_receive_handler(client: Client, message: Message):
-    if str(message.chat.id) in Telegram.AUTH_CHANNEL:
+            
         try:
             if message.video or (message.document and message.document.mime_type.startswith("video/")):
                 file = message.video or message.document
