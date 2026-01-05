@@ -39,38 +39,44 @@ for _ in range(1):
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in Telegram.AUTH_CHANNEL:
         try:
-            urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', message.text or message.caption)
-            if not urls:
+            content = message.text or message.caption
+            urls = []
+            if content:
+                urls = re.findall(rf'https?://[^\s/]*(?:{"|".join(map(re.escape, SUPPORTED_DOMAINS))})[^\s/]+/[^\s]+', content)
+
+            if urls:
+                msg_id = message.id
+                channel = str(message.chat.id).replace("-100", "")
+
+                for url in urls:
+                    try:
+                        provider = detect_provider(url)
+                        result = await provider.fetch(url)
+
+                        title = result.get("file_name") or ((m := re.search(r'.*?\.(?:mkv|mp4)', content, re.IGNORECASE)) and m.group(0))
+                        size = result.get("size") or ((m := re.search(r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)', content, re.IGNORECASE)) and f"{float(m.group(1)):.2f}{m.group(2).upper()}")
+
+                        if not title and size:
+                            LOGGER.error(f"Title or Size not available for URL: {url}")
+                            continue
+
+                        encoded_string = await encode_string({
+                            "provider": provider.name,
+                            "url": url,
+                        })
+
+                        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, encoded_string=encoded_string)
+                        if not metadata_info:
+                            LOGGER.warning(f"Metadata failed for {provider.name} (link: {title})")
+                            continue
+
+                        await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                    except Exception as e:
+                        LOGGER.error(f"Error processing {url}: {e}")
                 return
-            msg_id = message.id
-            channel = str(message.chat.id).replace("-100", "")
-
-            for url in urls:
-                provider = detect_provider(url)
-                result = await provider.fetch(url)
-                
-                title = result.get("file_name") or ((m := re.search(r'.*?\.(?:mkv|mp4)', message.text or message.caption, re.IGNORECASE)) and m.group(0))
-                size = result.get("size") or ((m := re.search(r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)', message.text or message.caption, re.IGNORECASE)) and f"{float(m.group(1)):.2f}{m.group(2).upper()}")
-
-                if not title and size:
-                    LOGGER.error(f"Title or Size not available for URL: {url}")
-                    return
-    
-                encoded_string = await encode_string({
-                    "provider": provider.name,
-                    "url": url,
-                })
-                
-                metadata_info = await metadata(clean_filename(title), int(channel), msg_id, encoded_string=encoded_string)
-                if not metadata_info:
-                    LOGGER.warning(f"Metadata failed for {provider.name} (link: {title})")
-                    return
-                    
-                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
-            return
         
         except Exception as e:
-            LOGGER.error(f"Error processing {url}: {e}")
+            LOGGER.error(f"Error in URL processing: {e}")
             
         try:
             if message.video or (message.document and message.document.mime_type.startswith("video/")):
