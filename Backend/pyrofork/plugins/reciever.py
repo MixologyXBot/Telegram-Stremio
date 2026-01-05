@@ -76,15 +76,23 @@ async def file_receive_handler(client: Client, message: Message):
                     file = message.video or message.document
                     title = message.caption or file.file_name
 
+                    caption_text = message.caption
+                    match = None
                     if title:
                         match = re.search(r'(?s)(.*?\.(?:mkv|mp4))', title, re.IGNORECASE)
                         if match:
                             title = match.group(1).strip()
-                            create_task(edit_message(
-                                chat_id=message.chat.id,
-                                msg_id=message.id,
-                                new_caption=title
-                            ))
+                            caption_text = title
+
+                    if match or Backend.USE_DEFAULT_ID:
+                        if Backend.USE_DEFAULT_ID:
+                            caption_text = (caption_text + "\n\n" + Backend.USE_DEFAULT_ID) if caption_text else Backend.USE_DEFAULT_ID
+
+                        create_task(edit_message(
+                            chat_id=message.chat.id,
+                            msg_id=message.id,
+                            new_caption=caption_text
+                        ))
 
                     msg_id = message.id
                     size = get_readable_file_size(file.file_size)
