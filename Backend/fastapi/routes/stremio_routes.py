@@ -2,8 +2,10 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
+from Backend.helper.encrypt import decode_string
 from Backend import db, __version__
 import PTN
+import re
 from datetime import datetime, timezone, timedelta
 
 
@@ -23,6 +25,11 @@ GENRES = [
     "Sci-Fi", "Sport", "Thriller", "War", "Western"
 ]
 
+PROVIDER_PRIORITY = {
+    "HubCloud": 3,
+    "GDFlix": 2,
+    "Telegram": 1
+}
 
 # --- Helper Functions ---
 def convert_to_stremio_meta(item: dict) -> dict:
@@ -50,11 +57,11 @@ def convert_to_stremio_meta(item: dict) -> dict:
     return meta
 
 
-def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, str]:
+def format_stream_details(filename: str, quality: str, size: str, source: str = "Telegram") -> tuple[str, str]:
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n💾 {size}")
+        return (f"{source} | {quality}", f"📁 {filename}\n💾 {size}")
 
     codec_parts = []
     if parsed.get("codec"):
@@ -70,7 +77,7 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
 
     resolution = parsed.get("resolution", quality)
     quality_type = parsed.get("quality", "")
-    stream_name = f"Telegram {resolution} {quality_type}".strip()
+    stream_name = f"{source} | {resolution} {quality_type}".strip()
 
     stream_title_parts = [
         f"📁 {filename}",
@@ -95,6 +102,14 @@ def get_resolution_priority(stream_name: str) -> int:
         if res_key in stream_name.lower():
             return res_value
     return 1
+
+
+def parse_size(size_str: str) -> float:
+    if not size_str: return 0
+    units = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+    if match := re.search(r"([\d.]+)\s*([a-zA-Z]+)", size_str):
+        return float(match.group(1)) * units.get(match.group(2).upper(), 1)
+    return 0
 
 
 # --- Routes ---
@@ -300,13 +315,22 @@ async def get_streams(media_type: str, id: str):
             quality_str = quality.get('quality', 'HD')
             size = quality.get('size', '')
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+            decoded_data = await decode_string(quality.get('id'))
+            source = (decoded_data.get("provider") or "Telegram")
+            stream_name, stream_title = format_stream_details(filename, quality_str, size, source)
 
             streams.append({
-                "name": stream_name,
-                "title": stream_title,
-                "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                "data": {
+                    "name": stream_name,
+                    "title": stream_title,
+                    "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                },
+                "sort_key": (
+                    PROVIDER_PRIORITY.get(source, 0),
+                    get_resolution_priority(stream_name),
+                    parse_size(size)
+                )
             })
 
-    streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)
-    return {"streams": streams}
+    streams.sort(key=lambda x: x["sort_key"], reverse=True)
+    return {"streams": [s["data"] for s in streams]}

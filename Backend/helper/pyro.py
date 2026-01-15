@@ -4,6 +4,7 @@ from Backend.logger import LOGGER
 from Backend import __version__, now, timezone
 from Backend.config import Telegram
 from Backend.helper.exceptions import FIleNotFound
+from Backend.helper.encrypt import decode_string
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
@@ -53,6 +54,21 @@ def get_readable_file_size(size_in_bytes):
         index += 1
     
     return f'{size_in_bytes:.2f}{SIZE_UNITS[index]}' if index > 0 else f'{size_in_bytes:.0f}B'
+
+
+def extract_title(text):
+    if not text:
+        return []
+        
+    return [x.strip() for x in re.findall(r'(.*?\.(?:mkv|mp4))', text, re.IGNORECASE)]
+
+
+def extract_size(text):
+    if not text:
+        return []
+        
+    pattern = r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)\b'
+    return [f"{float(m[0]):.2f}{m[1].upper()}" for m in re.findall(pattern, text, re.IGNORECASE)]
 
 
 def clean_filename(filename):
@@ -113,7 +129,6 @@ def remove_urls(text):
     cleaned_text = re.sub(r'\s+', ' ', text_without_urls).strip()
     
     return cleaned_text
-
 
 
 def fetch_scrape_data(platform: str, url: str) -> dict:
@@ -186,4 +201,3 @@ async def setup_bot_commands(bot: Client):
         LOGGER.info("Bot commands updated successfully.")
     except Exception as e:
         LOGGER.error(f"Error setting up bot commands: {e}")
-

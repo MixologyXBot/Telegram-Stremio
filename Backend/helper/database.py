@@ -296,9 +296,16 @@ class Database:
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
 
-        if Telegram.REPLACE_MODE:
-            # delete all same-quality entries
-            to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
+        is_link = "provider" in await decode_string(quality_to_update["id"])
+        replace_mode = Telegram.REPLACE_LINK_MODE if is_link else Telegram.REPLACE_MODE
+
+        if replace_mode:
+            # Strict Separation: Link <-> Link, File <-> File
+            to_delete = []
+            for q in existing_qualities:
+                if q.get("quality") == target_quality:
+                    if ("provider" in await decode_string(q["id"])) == is_link:
+                        to_delete.append(q)
 
             for q in to_delete:
                 try:
@@ -311,9 +318,7 @@ class Database:
                 except Exception as e:
                     LOGGER.error(f"Failed to delete old quality: {e}")
 
-            existing_qualities = [
-                q for q in existing_qualities if q.get("quality") != target_quality
-            ]
+            existing_qualities = [q for q in existing_qualities if q not in to_delete]
             existing_qualities.append(quality_to_update)
 
         else:
@@ -421,11 +426,15 @@ class Database:
                 for quality in episode["telegram"]:
                     target_quality = quality.get("quality")
 
-                    if Telegram.REPLACE_MODE:
-                        to_delete = [
-                            q for q in existing_episode["telegram"]
-                            if q.get("quality") == target_quality
-                        ]
+                    is_link = "provider" in await decode_string(quality["id"])
+                    replace_mode = Telegram.REPLACE_LINK_MODE if is_link else Telegram.REPLACE_MODE
+
+                    if replace_mode:
+                        to_delete = []
+                        for q in existing_episode["telegram"]:
+                            if q.get("quality") == target_quality:
+                                if ("provider" in await decode_string(q["id"])) == is_link:
+                                    to_delete.append(q)
 
                         for q in to_delete:
                             try:
@@ -440,7 +449,7 @@ class Database:
 
                         existing_episode["telegram"] = [
                             q for q in existing_episode["telegram"]
-                            if q.get("quality") != target_quality
+                            if q not in to_delete
                         ]
                         existing_episode["telegram"].append(quality)
 

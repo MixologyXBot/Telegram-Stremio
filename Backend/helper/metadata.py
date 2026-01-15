@@ -152,7 +152,7 @@ async def _tmdb_episode_details(tv_id, season, episode):
         return None
 
 # ----------------- Main Metadata -----------------
-async def metadata(filename: str, channel: int, msg_id) -> dict | None:
+async def metadata(filename: str, channel: int, msg_id, encoded_string: str = None) -> dict | None:
     try:
         parsed = PTN.parse(filename)
     except Exception as e:
@@ -200,11 +200,12 @@ async def metadata(filename: str, channel: int, msg_id) -> dict | None:
         except Exception:
             pass
 
-    data = {"chat_id": channel, "msg_id": msg_id}
-    try:
-        encoded_string = await encode_string(data)
-    except Exception:
-        encoded_string = None
+    if encoded_string is None:
+        data = {"chat_id": channel, "msg_id": msg_id}
+        try:
+            encoded_string = await encode_string(data)
+        except Exception:
+            encoded_string = None
 
     try:
         if season and episode:
