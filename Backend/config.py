@@ -1,7 +1,4 @@
-from os import getenv, path
-from dotenv import load_dotenv
-
-load_dotenv(path.join(path.dirname(path.dirname(__file__)), "config.env"))
+from os import getenv
 
 class Telegram:
     API_ID = int(getenv("API_ID", "0"))
@@ -16,6 +13,7 @@ class Telegram:
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
     SCRAPE_API = (getenv("SCRAPE_API") or getenv("SCRAPE_URL", "")).rstrip('/')
     HUBCLOUD_API = getenv("HUBCLOUD_API", "").rstrip('/')
+    IMDB_TEMPLATE = getenv("IMDB_TEMPLATE", "")
 
     TMDB_API = getenv("TMDB_API", "")
 
@@ -28,4 +26,3 @@ class Telegram:
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
-    
