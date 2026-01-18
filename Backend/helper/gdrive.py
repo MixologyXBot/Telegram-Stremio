@@ -102,9 +102,6 @@ class GDrive:
             return []
 
         q = f"name contains '{query}' and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
-        
-        # Add basic video mimetype filtering if needed, or rely on parsing
-        q += " and (mimeType contains 'video/' or mimeType contains 'audio/')"
 
         params = {
             "q": q,
