@@ -3,12 +3,16 @@ import secrets
 import mimetypes
 from typing import Tuple
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 
+from Backend.helper.providers import PROVIDERS
 from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
+from Backend.config import Telegram
+from Backend.logger import LOGGER
+import httpx
 
 router = APIRouter(tags=["Streaming"])
 class_cache = {}
@@ -39,6 +43,30 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
 @router.head("/dl/{id}/{name}")
 async def stream_handler(request: Request, id: str, name: str):
     decoded_data = await decode_string(id)
+    
+    if decoded_data.get("url"):
+        url = decoded_data["url"]
+        provider_name = decoded_data.get("provider")
+
+        provider = next((p for p in PROVIDERS if p.name == provider_name), None)
+
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not supported")
+
+        url = provider.normalize_url(url)
+
+        LOGGER.info(f"Fetching stream from {provider.name} | URL: {url}")
+
+        result = await provider.fetch(url)
+        if not result or not result.get("links"):
+            raise HTTPException(status_code=404, detail="Stream not found")
+
+        stream_url = next(iter(result["links"].values()))
+        LOGGER.info(f"Redirecting {provider.name} stream → {stream_url}")
+
+        return RedirectResponse(url=stream_url)
+
+
     if not decoded_data.get("msg_id"):
         raise HTTPException(status_code=400, detail="Missing id")
 

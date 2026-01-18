@@ -16,6 +16,7 @@ from Backend.fastapi.routes.api_routes import (
     delete_movie_quality_api, delete_tv_quality_api,
     delete_tv_episode_api, delete_tv_season_api
 )
+from Backend.fastapi.routes.public_api import router as public_api_router
 
 app = FastAPI(
     title="Telegram Stremio Media Server",
@@ -41,6 +42,7 @@ except Exception:
 # --- Include existing API routers ---
 app.include_router(stream_router)
 app.include_router(stremio_router)
+app.include_router(public_api_router)
 
 # --- Public Routes (No Authentication Required) ---
 @app.get("/login", response_class=HTMLResponse)

@@ -6,11 +6,13 @@ from Backend.fastapi.themes import get_theme, get_all_themes
 from Backend import db
 from Backend.pyrofork.bot import work_loads, multi_clients, StreamBot
 from Backend.helper.pyro import get_readable_time
+from Backend.config import Telegram
 from Backend import StartTime, __version__
 from time import time
 
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
+templates.env.globals["BASE_URL"] = Telegram.BASE_URL.rstrip("/") + "/"
 
 async def login_page(request: Request):
     if is_authenticated(request):

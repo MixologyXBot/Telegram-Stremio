@@ -296,24 +296,31 @@ class Database:
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
 
-        if Telegram.REPLACE_MODE:
-            # delete all same-quality entries
-            to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
+        is_link = "provider" in await decode_string(quality_to_update["id"])
+        replace_mode = Telegram.REPLACE_LINK_MODE if is_link else Telegram.REPLACE_MODE
+
+        if replace_mode:
+            # Strict Separation: Link <-> Link, File <-> File
+            to_delete = []
+            for q in existing_qualities:
+                if q.get("quality") == target_quality:
+                    if ("provider" in await decode_string(q["id"])) == is_link:
+                        to_delete.append(q)
 
             for q in to_delete:
                 try:
                     old_id = q.get("id")
                     if old_id:
                         decoded = await decode_string(old_id)
+                        if "provider" in decoded:
+                            continue
                         chat_id = int(f"-100{decoded['chat_id']}")
                         msg_id = int(decoded['msg_id'])
                         create_task(delete_message(chat_id, msg_id))
                 except Exception as e:
                     LOGGER.error(f"Failed to delete old quality: {e}")
 
-            existing_qualities = [
-                q for q in existing_qualities if q.get("quality") != target_quality
-            ]
+            existing_qualities = [q for q in existing_qualities if q not in to_delete]
             existing_qualities.append(quality_to_update)
 
         else:
@@ -421,17 +428,23 @@ class Database:
                 for quality in episode["telegram"]:
                     target_quality = quality.get("quality")
 
-                    if Telegram.REPLACE_MODE:
-                        to_delete = [
-                            q for q in existing_episode["telegram"]
-                            if q.get("quality") == target_quality
-                        ]
+                    is_link = "provider" in await decode_string(quality["id"])
+                    replace_mode = Telegram.REPLACE_LINK_MODE if is_link else Telegram.REPLACE_MODE
+
+                    if replace_mode:
+                        to_delete = []
+                        for q in existing_episode["telegram"]:
+                            if q.get("quality") == target_quality:
+                                if ("provider" in await decode_string(q["id"])) == is_link:
+                                    to_delete.append(q)
 
                         for q in to_delete:
                             try:
                                 old_id = q.get("id")
                                 if old_id:
                                     decoded = await decode_string(old_id)
+                                    if "provider" in decoded:
+                                        continue
                                     chat_id = int(f"-100{decoded['chat_id']}")
                                     msg_id = int(decoded['msg_id'])
                                     create_task(delete_message(chat_id, msg_id))
@@ -440,7 +453,7 @@ class Database:
 
                         existing_episode["telegram"] = [
                             q for q in existing_episode["telegram"]
-                            if q.get("quality") != target_quality
+                            if q not in to_delete
                         ]
                         existing_episode["telegram"].append(quality)
 
@@ -523,7 +536,7 @@ class Database:
                 {"$project": {
                     "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1, "imdb_id": 1,
                     "release_year": 1, "poster": 1, "backdrop": 1, "description": 1, "logo": 1,
-                    "media_type": 1, "db_index": 1
+                    "media_type": 1, "db_index": 1, "seasons": 1
                 }}
             ]
             
@@ -535,7 +548,7 @@ class Database:
                 {"$project": {
                     "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1,
                     "release_year": 1, "poster": 1, "backdrop": 1, "description": 1,
-                    "media_type": 1, "db_index": 1, "imdb_id": 1, "logo": 1
+                    "media_type": 1, "db_index": 1, "imdb_id": 1, "logo": 1, "telegram": 1
                 }}
             ]
             
@@ -639,7 +652,100 @@ class Database:
                 movie_doc = convert_objectid_to_str(movie_doc)
                 movie_doc["type"] = "movie"
                 return movie_doc
+            
             return None
+
+    async def get_quality_details(
+        self,
+        tmdb_id: int,
+        quality: str,
+        season: Optional[int] = None
+    ) -> List[Dict[str, int]]:
+        # Search across all storage databases
+        for db_index in range(1, self.current_db_index + 1):
+            db_key = f"storage_{db_index}"
+            if season is None:
+                # Movie case
+                movie_collection = self.dbs[db_key]["movie"]
+                doc = await movie_collection.find_one(
+                    {"tmdb_id": tmdb_id},
+                    {"telegram": 1}
+                )
+                if not doc:
+                    continue
+                    
+                results = [
+                    {"id": item["id"], "name": item["name"]}
+                    for item in doc.get("telegram", [])
+                    if item.get("quality") == quality
+                ]
+                if results:
+                    return results
+            else:
+                # TV show case
+                tv_collection = self.dbs[db_key]["tv"]
+                doc = await tv_collection.find_one(
+                    {"tmdb_id": tmdb_id},
+                    {"seasons": 1}
+                )
+                if not doc:
+                    continue
+                
+                results = []
+                for s in doc.get("seasons", []):
+                    if s["season_number"] == season:
+                        episodes = sorted(s.get("episodes", []), 
+                                        key=lambda ep: ep["episode_number"])
+                        for episode in episodes:
+                            results.extend([
+                                {"id": t["id"], "name": t["name"]}
+                                for t in episode.get("telegram", [])
+                                if t.get("quality") == quality
+                            ])
+                if results:
+                    return results
+                    
+        return []
+
+
+    async def find_similar_media(
+        self,
+        tmdb_id: int,
+        media_type: str,
+        page: int = 1,
+        page_size: int = 10
+    ) -> dict:
+        col_name = "movie" if media_type == "movie" else "tv"
+        collection = self.dbs[f"storage_{self.current_db_index}"][col_name]
+        parent_media = await collection.find_one({"tmdb_id": tmdb_id})
+        
+        if not parent_media:
+            raise HTTPException(status_code=404, detail="Media not found")
+        
+        parent_genres = parent_media.get("genres", [])
+        if not parent_genres:
+            return {"total_count": 0, "similar_media": []}
+
+        skip = (page - 1) * page_size
+        pipeline = [
+            {"$match": {
+                "tmdb_id": {"$ne": tmdb_id},
+                "genres": {"$in": parent_genres}
+            }},
+            {"$addFields": {
+                "genreMatchCount": {"$size": {"$setIntersection": ["$genres", parent_genres]}}
+            }},
+            {"$sort": {"genreMatchCount": -1, "rating": -1}},
+            {"$facet": {
+                "metadata": [{"$count": "total_count"}],
+                "data": [{"$skip": skip}, {"$limit": page_size}]
+            }}
+        ]
+        
+        result = await collection.aggregate(pipeline).to_list(1)
+        total_count = result[0]["metadata"][0]["total_count"] if result[0]["metadata"] else 0
+        similar_media = [convert_objectid_to_str(doc) for doc in result[0]["data"]]
+        return {"total_count": total_count, "similar_media": similar_media}
 
 
     # -------------------------------
@@ -720,6 +826,8 @@ class Database:
                         old_id = quality.get("id")
                         if old_id:
                             decoded_data = await decode_string(old_id)
+                            if "provider" in decoded_data:
+                                continue
                             chat_id = int(f"-100{decoded_data['chat_id']}")
                             msg_id = int(decoded_data['msg_id'])
                             create_task(delete_message(chat_id, msg_id))
@@ -737,6 +845,8 @@ class Database:
                                 old_id = quality.get("id")
                                 if old_id:
                                     decoded_data = await decode_string(old_id)
+                                    if "provider" in decoded_data:
+                                        continue
                                     chat_id = int(f"-100{decoded_data['chat_id']}")
                                     msg_id = int(decoded_data['msg_id'])
                                     create_task(delete_message(chat_id, msg_id))
@@ -764,6 +874,8 @@ class Database:
                     old_id = q.get("id")
                     if old_id:
                         decoded_data = await decode_string(old_id)
+                        if "provider" in decoded_data:
+                            continue
                         chat_id = int(f"-100{decoded_data['chat_id']}")
                         msg_id = int(decoded_data['msg_id'])
                         create_task(delete_message(chat_id, msg_id))
@@ -798,6 +910,8 @@ class Database:
                                 old_id = quality.get("id")
                                 if old_id:
                                     decoded_data = await decode_string(old_id)
+                                    if "provider" in decoded_data:
+                                        continue
                                     chat_id = int(f"-100{decoded_data['chat_id']}")
                                     msg_id = int(decoded_data['msg_id'])
                                     create_task(delete_message(chat_id, msg_id))
@@ -832,6 +946,8 @@ class Database:
                             old_id = quality.get("id")
                             if old_id:
                                 decoded_data = await decode_string(old_id)
+                                if "provider" in decoded_data:
+                                    continue
                                 chat_id = int(f"-100{decoded_data['chat_id']}")
                                 msg_id = int(decoded_data['msg_id'])
                                 create_task(delete_message(chat_id, msg_id))
@@ -867,6 +983,8 @@ class Database:
                                     old_id = q.get("id")
                                     if old_id:
                                         decoded_data = await decode_string(old_id)
+                                        if "provider" in decoded_data:
+                                            continue
                                         chat_id = int(f"-100{decoded_data['chat_id']}")
                                         msg_id = int(decoded_data['msg_id'])
                                         create_task(delete_message(chat_id, msg_id))
