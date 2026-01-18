@@ -22,6 +22,10 @@ class Telegram:
     UPSTREAM_REPO = getenv("UPSTREAM_REPO", "")
     UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "")
 
+    GDRIVE_CLIENT_ID = getenv("GDRIVE_CLIENT_ID", "")
+    GDRIVE_CLIENT_SECRET = getenv("GDRIVE_CLIENT_SECRET", "")
+    GDRIVE_REFRESH_TOKEN = getenv("GDRIVE_REFRESH_TOKEN", "")
+
     OWNER_ID = int(getenv("OWNER_ID", "5422223708"))
     REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"
     REPLACE_LINK_MODE = getenv("REPLACE_LINK_MODE", "true").lower() == "true"

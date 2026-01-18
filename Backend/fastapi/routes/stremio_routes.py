@@ -3,6 +3,7 @@ from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
 from Backend.helper.encrypt import decode_string
+from Backend.helper.gdrive import GDrive
 from Backend import db, __version__
 import PTN
 import re
@@ -329,6 +330,32 @@ async def get_streams(media_type: str, id: str):
                     PROVIDER_PRIORITY.get(source, 0),
                     get_resolution_priority(stream_name),
                     parse_size(size)
+                )
+            })
+
+    # --- GDrive Integration ---
+    if media_details and media_details.get("title"):
+        search_query = media_details["title"]
+        if season_num is not None and episode_num is not None:
+            search_query += f" S{season_num:02d}E{episode_num:02d}"
+        elif media_details.get("release_year"):
+            search_query += f" {media_details['release_year']}"
+
+        gdrive_files = await GDrive.search(search_query)
+        for file in gdrive_files:
+            stream_name = f"GDrive | {file.get('resolution', 'Unknown')}"
+            stream_title = f"📁 {file['name']}\n💾 {file.get('size', 'Unknown')}"
+            
+            streams.append({
+                "data": {
+                    "name": stream_name,
+                    "title": stream_title,
+                    "url": f"{BASE_URL}/gdl/{file['id']}/{unquote(file['name'])}"
+                },
+                "sort_key": (
+                    10, # High priority for GDrive? Or create a constant.
+                    get_resolution_priority(stream_name),
+                    parse_size(file.get("size"))
                 )
             })
 

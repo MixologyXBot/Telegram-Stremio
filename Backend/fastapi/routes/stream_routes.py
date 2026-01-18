@@ -9,6 +9,7 @@ from Backend.helper.providers import PROVIDERS
 from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
+from Backend.helper.gdrive import GDrive
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
 from Backend.config import Telegram
 from Backend.logger import LOGGER
@@ -142,4 +143,52 @@ async def media_streamer(
         content=body,
         headers=headers,
         media_type=mime_type,
+    )
+
+
+@router.get("/gdl/{file_id}/{name}")
+@router.head("/gdl/{file_id}/{name}")
+async def gdrive_stream_handler(request: Request, file_id: str, name: str):
+    url, token = await GDrive.get_stream_url(file_id)
+    if not url:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    headers = {"Authorization": f"Bearer {token}"}
+    if request.headers.get("Range"):
+        headers["Range"] = request.headers.get("Range")
+
+    client = httpx.AsyncClient()
+    req = client.build_request("GET", url, headers=headers)
+    
+    try:
+        r = await client.send(req, stream=True)
+    except Exception as e:
+        await client.aclose()
+        LOGGER.error(f"GDrive Stream Error: {e}")
+        raise HTTPException(status_code=502, detail="Upstream Error")
+
+    async def iterator():
+        try:
+            async for chunk in r.aiter_bytes():
+                yield chunk
+        finally:
+            await r.aclose()
+            await client.aclose()
+
+    response_headers = {
+        "Content-Type": r.headers.get("Content-Type", "application/octet-stream"),
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+    }
+    
+    if "Content-Length" in r.headers:
+        response_headers["Content-Length"] = r.headers["Content-Length"]
+    if "Content-Range" in r.headers:
+        response_headers["Content-Range"] = r.headers["Content-Range"]
+
+    return StreamingResponse(
+        iterator(),
+        status_code=r.status_code,
+        headers=response_headers,
+        media_type=response_headers["Content-Type"],
     )
