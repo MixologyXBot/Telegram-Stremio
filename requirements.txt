@@ -9,3 +9,6 @@ pytz
 tgcrypto
 themoviedb
 uvicorn
+imdbinfo
+cloudscraper
+pycountry

@@ -4,11 +4,13 @@ from Backend.logger import LOGGER
 from Backend import __version__, now, timezone
 from Backend.config import Telegram
 from Backend.helper.exceptions import FIleNotFound
+from Backend.helper.encrypt import decode_string
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
 import re
+import requests
 from pyrogram.types import BotCommand
 from pyrogram import enums
 
@@ -52,6 +54,21 @@ def get_readable_file_size(size_in_bytes):
         index += 1
     
     return f'{size_in_bytes:.2f}{SIZE_UNITS[index]}' if index > 0 else f'{size_in_bytes:.0f}B'
+
+
+def extract_title(text):
+    if not text:
+        return []
+        
+    return [x.strip() for x in re.findall(r'(.*?\.(?:mkv|mp4))', text, re.IGNORECASE)]
+
+
+def extract_size(text):
+    if not text:
+        return []
+        
+    pattern = r'([\d]+(?:\.\d+)?)\s*(TB|GB|MB|KB)\b'
+    return [f"{float(m[0]):.2f}{m[1].upper()}" for m in re.findall(pattern, text, re.IGNORECASE)]
 
 
 def clean_filename(filename):
@@ -114,6 +131,27 @@ def remove_urls(text):
     return cleaned_text
 
 
+def fetch_scrape_data(platform: str, url: str) -> dict:
+    try:
+        response = requests.get(
+            f"{Telegram.SCRAPE_API}/api/{platform}",
+            params={"url": url},
+            timeout=15
+        )
+        response.raise_for_status()
+        res = response.json() or {}
+
+        if not isinstance(res, dict):
+            return {}
+        if res.get("error"):
+            return {"error": res["error"]}
+        if isinstance(res.get("data"), dict) and res["data"]:
+            return res["data"]
+        return res
+
+    except Exception as e:
+        return {"error": str(e)}
+
 
 async def restart_notification():
     chat_id, msg_id = 0, 0
@@ -145,6 +183,8 @@ async def restart_notification():
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
+    BotCommand("imdb", "🔎 [query] or ttxxxxxx Get IMDB info"),
+    BotCommand("scrape", "⛓️‍💥 Extract data from HubCloud, GDFlix links"),
     BotCommand("fixmetadata", "⚙️ Fix empty fields of Metadata"),
     BotCommand("log", "📄 Send the log file"),
     BotCommand("restart", "♻️ Restart the bot"),
@@ -162,4 +202,3 @@ async def setup_bot_commands(bot: Client):
         LOGGER.info("Bot commands updated successfully.")
     except Exception as e:
         LOGGER.error(f"Error setting up bot commands: {e}")
-

@@ -14,6 +14,8 @@ class Telegram:
 
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
+    SCRAPE_API = (getenv("SCRAPE_API") or getenv("SCRAPE_URL", "")).rstrip('/')
+    HUBCLOUD_API = getenv("HUBCLOUD_API", "").rstrip('/')
 
     TMDB_API = getenv("TMDB_API", "")
 
@@ -22,7 +24,33 @@ class Telegram:
 
     OWNER_ID = int(getenv("OWNER_ID", "5422223708"))
     REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"
+    REPLACE_LINK_MODE = getenv("REPLACE_LINK_MODE", "true").lower() == "true"
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
+    
+    IMDB_TEMPLATE = '''
+<b>Title:</b> <a href="{url}">{title}</a>
+<b>Original Title:</b> {localized_title}
+<b>AKA:</b> {aka}
+<b>Rating:</b> <a href="{url}/ratings">{rating}</a>
+<b>Genre:</b> {genres}
+<b>Year:</b> <a href="{url}/releaseinfo">{year}</a>
+<b>Release Date:</b> {release_date}
+<b>Status:</b> {kind}
+<b>Runtime:</b> {runtime}
+<b>Language:</b> {languages}
+<b>Country:</b> {countries}
+
+<b>Director:</b> {director}
+<b>Writer:</b> {writer}
+<b>Producer:</b> {producer}
+<b>Composer:</b> {composer}
+<b>Cinematographer:</b> {cinematographer}
+<b>Music Director:</b> {music_team}
+
+<b>Cast:</b> {cast}
+
+<b>Plot:</b> {plot}
+'''
     
