@@ -25,6 +25,7 @@ class Telegram:
     GDRIVE_CLIENT_ID = getenv("GDRIVE_CLIENT_ID", "")
     GDRIVE_CLIENT_SECRET = getenv("GDRIVE_CLIENT_SECRET", "")
     GDRIVE_REFRESH_TOKEN = getenv("GDRIVE_REFRESH_TOKEN", "")
+    GDRIVE_FOLDER_IDS = [folder.strip() for folder in (getenv("GDRIVE_FOLDER_IDS") or "").split(",") if folder.strip()]
 
     OWNER_ID = int(getenv("OWNER_ID", "5422223708"))
     REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"

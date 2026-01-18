@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 from Backend.config import Telegram
 from Backend.helper.encrypt import decode_string
 from Backend.helper.gdrive import GDrive
@@ -56,6 +56,15 @@ def convert_to_stremio_meta(item: dict) -> dict:
     }
 
     return meta
+
+def convert_gdrive_to_meta(file: dict) -> dict:
+    return {
+        "id": f"gdrive_file:{file['id']}",
+        "type": "movie", # Default to movie for list items
+        "name": file['name'],
+        "poster": file.get('thumbnailLink') or "https://via.placeholder.com/300x450?text=GDrive",
+        "description": f"Size: {file.get('formattedSize')}\nCreated: {file.get('createdTime')}",
+    }
 
 
 def format_stream_details(filename: str, quality: str, size: str, source: str = "Telegram") -> tuple[str, str]:
@@ -116,7 +125,7 @@ def parse_size(size_str: str) -> float:
 # --- Routes ---
 @router.get("/manifest.json")
 async def get_manifest():
-    return {
+    manifest = {
         "id": "telegram.media",
         "version": ADDON_VERSION,
         "name": ADDON_NAME,
@@ -175,6 +184,27 @@ async def get_manifest():
         }
     }
 
+    # Add GDrive catalogs if configured
+    if Telegram.GDRIVE_CLIENT_ID:
+        manifest["catalogs"].append({
+            "type": "movie",
+            "id": "gdrive_list",
+            "name": "Google Drive",
+        })
+        manifest["catalogs"].append({
+            "type": "movie",
+            "id": "gdrive_search",
+            "name": "Google Drive Search",
+            "extra": [
+                {
+                    "name": "search",
+                    "isRequired": True,
+                },
+            ],
+        })
+
+    return manifest
+
 
 @router.get("/catalog/{media_type}/{id}/{extra:path}.json")
 @router.get("/catalog/{media_type}/{id}.json")
@@ -199,6 +229,20 @@ async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
                 except ValueError:
                     stremio_skip = 0
 
+    # --- GDrive Catalogs ---
+    if id == "gdrive_list":
+        files = await GDrive.get_latest_files()
+        metas = [convert_gdrive_to_meta(f) for f in files]
+        return {"metas": metas}
+
+    if id == "gdrive_search":
+        if not search_query:
+            return {"metas": []}
+        files = await GDrive.search(search_query)
+        metas = [convert_gdrive_to_meta(f) for f in files]
+        return {"metas": metas}
+
+    # --- Standard Catalogs ---
     page = (stremio_skip // PAGE_SIZE) + 1
 
     try:
@@ -230,6 +274,13 @@ async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
 
 @router.get("/meta/{media_type}/{id}.json")
 async def get_meta(media_type: str, id: str):
+    if id.startswith("gdrive_file:"):
+         # Minimal meta for gdrive file
+         file_id = id.split(":", 1)[1]
+         file = await GDrive.get_file_metadata(file_id)
+         if not file: return {"meta": {}}
+         return {"meta": convert_gdrive_to_meta(file)}
+
     try:
         tmdb_id_str, db_index_str = id.split("-")
         tmdb_id, db_index = int(tmdb_id_str), int(db_index_str)
@@ -288,6 +339,21 @@ async def get_meta(media_type: str, id: str):
 
 @router.get("/stream/{media_type}/{id}.json")
 async def get_streams(media_type: str, id: str):
+    if id.startswith("gdrive_file:"):
+         # Direct stream for catalog gdrive items
+         file_id = id.split(":", 1)[1]
+         file = await GDrive.get_file_metadata(file_id)
+         if not file: return {"streams": []}
+
+         stream_name = f"GDrive | {file.get('resolution', 'Unknown')}"
+         stream_title = f"📁 {file['name']}\n💾 {file.get('formattedSize', 'Unknown')}"
+
+         return {"streams": [{
+             "name": stream_name,
+             "title": stream_title,
+             "url": f"{BASE_URL}/gdl/{file['id']}/{quote(file['name'])}"
+         }]}
+
     try:
         parts = id.split(":")
         base_id = parts[0]
@@ -307,55 +373,81 @@ async def get_streams(media_type: str, id: str):
     )
 
     if not media_details or "telegram" not in media_details:
-        return {"streams": []}
+        streams = [] # Initialize streams even if no telegram results, as we might have GDrive results
+    else:
+        streams = []
+        for quality in media_details.get("telegram", []):
+            if quality.get("id"):
+                filename = quality.get('name', '')
+                quality_str = quality.get('quality', 'HD')
+                size = quality.get('size', '')
 
-    streams = []
-    for quality in media_details.get("telegram", []):
-        if quality.get("id"):
-            filename = quality.get('name', '')
-            quality_str = quality.get('quality', 'HD')
-            size = quality.get('size', '')
+                decoded_data = await decode_string(quality.get('id'))
+                source = (decoded_data.get("provider") or "Telegram")
+                stream_name, stream_title = format_stream_details(filename, quality_str, size, source)
 
-            decoded_data = await decode_string(quality.get('id'))
-            source = (decoded_data.get("provider") or "Telegram")
-            stream_name, stream_title = format_stream_details(filename, quality_str, size, source)
-
-            streams.append({
-                "data": {
-                    "name": stream_name,
-                    "title": stream_title,
-                    "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
-                },
-                "sort_key": (
-                    PROVIDER_PRIORITY.get(source, 0),
-                    get_resolution_priority(stream_name),
-                    parse_size(size)
-                )
-            })
+                streams.append({
+                    "data": {
+                        "name": stream_name,
+                        "title": stream_title,
+                        "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                    },
+                    "sort_key": (
+                        PROVIDER_PRIORITY.get(source, 0),
+                        get_resolution_priority(stream_name),
+                        parse_size(size)
+                    )
+                })
 
     # --- GDrive Integration ---
     if media_details and media_details.get("title"):
-        search_query = media_details["title"]
-        if season_num is not None and episode_num is not None:
-            search_query += f" S{season_num:02d}E{episode_num:02d}"
-        elif media_details.get("release_year"):
-            search_query += f" {media_details['release_year']}"
+        search_request = {
+            "name": media_details["title"],
+            "year": media_details.get("release_year"),
+            "type": "series" if media_details.get("media_type") == "tv" else "movie",
+            "season": season_num,
+            "episode": episode_num
+        }
 
-        gdrive_files = await GDrive.search(search_query)
+        gdrive_files = await GDrive.search(search_request)
         for file in gdrive_files:
-            stream_name = f"GDrive | {file.get('resolution', 'Unknown')}"
-            stream_title = f"📁 {file['name']}\n💾 {file.get('size', 'Unknown')}"
+            # Rich formatting matching index.js
+            name = f"GDrive {file.get('resolution', '')}"
+
+            description = f"🎥 {file['quality']}"
+            if file.get('encode'):
+                description += f" 🎞️ {file['encode']}"
+
+            if file.get('visualTags') or file.get('audioTags'):
+                 description += "\n"
+                 if file.get('visualTags'):
+                     description += f"📺 {' | '.join(file['visualTags'])}   "
+                 if file.get('audioTags'):
+                     description += f"🎧 {' | '.join(file['audioTags'])}"
+
+            description += f"\n📦 {file.get('formattedSize', 'Unknown')}"
             
+            if file.get('languages'):
+                description += f"\n🔊 {' | '.join(file['languages'])}"
+
+            description += f"\n📄 {file['name']}"
+            if file.get('duration'):
+                description += f"\n⏱️ {GDrive.format_duration(file['duration'])}"
+
             streams.append({
                 "data": {
-                    "name": stream_name,
-                    "title": stream_title,
-                    "url": f"{BASE_URL}/gdl/{file['id']}/{unquote(file['name'])}"
+                    "name": name,
+                    "title": description, # Stremio title acts as description in most players
+                    "url": f"{BASE_URL}/gdl/{file['id']}/{quote(file['name'])}",
+                    "behaviorHints": {
+                        "videoSize": int(file.get("size") or 0),
+                        "filename": file["name"]
+                    }
                 },
                 "sort_key": (
-                    10, # High priority for GDrive? Or create a constant.
-                    get_resolution_priority(stream_name),
-                    parse_size(file.get("size"))
+                    10, # High priority for GDrive
+                    get_resolution_priority(file.get("resolution", "")),
+                    float(file.get("size", 0) or 0)
                 )
             })
 
