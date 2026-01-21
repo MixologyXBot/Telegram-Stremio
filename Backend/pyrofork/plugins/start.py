@@ -18,7 +18,7 @@ async def delete_messages_after_delay(messages):
             LOGGER.error(f"Error deleting message {msg.id}: {e}")
         await asleep(2)
 
-@Client.on_message(filters.command('start') & filters.private, group=10)
+@Client.on_message(filters.command('start') & filters.private & CustomFilters.owner, group=10)
 async def send_start_message(client: Client, message: Message):
     
     command_part = message.text.split('start ')[-1] if len(message.text.split('start ')) > 1 else ""
