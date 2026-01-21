@@ -438,3 +438,194 @@ async def fix_metadata_handler(_, message):
         )
     except Exception:
         pass
+
+
+# -------------------------------
+# CLEAR EXTERNAL LINKS COMMAND
+# -------------------------------
+@Client.on_message(filters.command("clearlinks") & filters.private & CustomFilters.owner, group=10)
+async def clear_external_links_handler(_, message):
+    """
+    Remove external provider links (HubCloud, GDFlix, etc.) from the database
+    while preserving Telegram file data (file_id, msg_id, channel).
+    """
+    global CANCEL_REQUESTED
+    CANCEL_REQUESTED = False
+
+    from Backend.helper.encrypt import decode_string
+
+    status = await message.reply_text(
+        "⏳ Scanning database for external provider links...",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
+        ])
+    )
+
+    total_movies = 0
+    total_tv = 0
+    for i in range(1, db.current_db_index + 1):
+        key = f"storage_{i}"
+        total_movies += await db.dbs[key]["movie"].count_documents({})
+        total_tv += await db.dbs[key]["tv"].count_documents({})
+
+    TOTAL = total_movies + total_tv
+    DONE = 0
+    links_removed = 0
+    start_time = time.time()
+    last_progress_edit = start_time
+    PROGRESS_INTERVAL = 3.0
+
+    async def is_provider_entry(encoded_id: str) -> bool:
+        try:
+            decoded = await decode_string(encoded_id)
+            return "provider" in decoded
+        except Exception:
+            return False
+
+    async def process_movie(collection, movie_doc):
+        nonlocal DONE, links_removed, last_progress_edit
+
+        if CANCEL_REQUESTED:
+            return
+
+        try:
+            doc_id = movie_doc.get("_id")
+            telegram_list = movie_doc.get("telegram", [])
+            
+            if not telegram_list:
+                DONE += 1
+                return
+
+            filtered_list = []
+            removed_count = 0
+            
+            for item in telegram_list:
+                encoded_id = item.get("id", "")
+                if await is_provider_entry(encoded_id):
+                    removed_count += 1
+                else:
+                    filtered_list.append(item)
+
+            if removed_count > 0:
+                await collection.update_one(
+                    {"_id": doc_id},
+                    {"$set": {"telegram": filtered_list}}
+                )
+                links_removed += removed_count
+                LOGGER.info(f"Removed {removed_count} provider link(s) from movie: {movie_doc.get('title')}")
+
+            DONE += 1
+
+            now = time.time()
+            if now - last_progress_edit > PROGRESS_INTERVAL:
+                last_progress_edit = now
+                try:
+                    await status.edit_text(
+                        f"⏳ Clearing external links...\n"
+                        f"{progress_bar(DONE, TOTAL)}\n"
+                        f"🗑 Links removed: {links_removed}\n"
+                        f"⏱ Elapsed: {format_eta(now - start_time)}"
+                    )
+                except Exception:
+                    pass
+
+        except Exception as e:
+            LOGGER.exception(f"Error processing movie {movie_doc.get('title')}: {e}")
+            DONE += 1
+
+    async def process_tv(collection, tv_doc):
+        nonlocal DONE, links_removed, last_progress_edit
+
+        if CANCEL_REQUESTED:
+            return
+
+        try:
+            doc_id = tv_doc.get("_id")
+            seasons = tv_doc.get("seasons", [])
+            doc_modified = False
+            doc_removed_count = 0
+
+            for season in seasons:
+                for episode in season.get("episodes", []):
+                    telegram_list = episode.get("telegram", [])
+                    if not telegram_list:
+                        continue
+
+                    filtered_list = []
+                    for item in telegram_list:
+                        encoded_id = item.get("id", "")
+                        if await is_provider_entry(encoded_id):
+                            doc_removed_count += 1
+                            doc_modified = True
+                        else:
+                            filtered_list.append(item)
+
+                    episode["telegram"] = filtered_list
+
+            if doc_modified:
+                await collection.update_one(
+                    {"_id": doc_id},
+                    {"$set": {"seasons": seasons}}
+                )
+                links_removed += doc_removed_count
+                LOGGER.info(f"Removed {doc_removed_count} provider link(s) from TV: {tv_doc.get('title')}")
+
+            DONE += 1
+
+            now = time.time()
+            if now - last_progress_edit > PROGRESS_INTERVAL:
+                last_progress_edit = now
+                try:
+                    await status.edit_text(
+                        f"⏳ Clearing external links...\n"
+                        f"{progress_bar(DONE, TOTAL)}\n"
+                        f"🗑 Links removed: {links_removed}\n"
+                        f"⏱ Elapsed: {format_eta(now - start_time)}"
+                    )
+                except Exception:
+                    pass
+
+        except Exception as e:
+            LOGGER.exception(f"Error processing TV show {tv_doc.get('title')}: {e}")
+            DONE += 1
+
+    # Process all movies
+    for i in range(1, db.current_db_index + 1):
+        if CANCEL_REQUESTED:
+            break
+        collection = db.dbs[f"storage_{i}"]["movie"]
+        cursor = collection.find({})
+        async for movie in cursor:
+            if CANCEL_REQUESTED:
+                break
+            await process_movie(collection, movie)
+
+    # Process all TV shows
+    for i in range(1, db.current_db_index + 1):
+        if CANCEL_REQUESTED:
+            break
+        collection = db.dbs[f"storage_{i}"]["tv"]
+        cursor = collection.find({})
+        async for tv in cursor:
+            if CANCEL_REQUESTED:
+                break
+            await process_tv(collection, tv)
+
+    if CANCEL_REQUESTED:
+        try:
+            await status.edit_text("❌ Link clearing cancelled by user.")
+        except Exception:
+            pass
+        return
+
+    elapsed = time.time() - start_time
+    try:
+        await status.edit_text(
+            f"🎉 **External Links Cleared!**\n"
+            f"{progress_bar(DONE, TOTAL)}\n"
+            f"🗑 Total links removed: **{links_removed}**\n"
+            f"⏱ Time Taken: {format_eta(elapsed)}\n\n"
+            f"✅ All Telegram file data preserved (file_id, msg_id, channel)"
+        )
+    except Exception:
+        pass
