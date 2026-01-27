@@ -46,12 +46,15 @@ async def file_receive_handler(client: Client, message: Message):
                     LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
                     return
 
-                title = remove_urls(title)
+                original_title = title
+                title = (title.split('.mkv')[0] + '.mkv') if '.mkv' in title else (title.split('.mp4')[0] + '.mp4') if '.mp4' in title else title
                 if not title.endswith(('.mkv', '.mp4')):
                     title += '.mkv'
 
-                if Backend.USE_DEFAULT_ID:
-                    new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
+                if title != original_title or Backend.USE_DEFAULT_ID:
+                    new_caption = (title + "\n\n" + Backend.USE_DEFAULT_ID) if Backend.USE_DEFAULT_ID else title
+                    log_msg = f"{metadata_info.get('title')} S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}" if metadata_info.get('season_number') else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+                    LOGGER.info(f"Editing Caption for Message ID: {message.id}: {log_msg}")
                     create_task(edit_message(
                         chat_id=message.chat.id,
                         msg_id=message.id,
