@@ -469,3 +469,247 @@ async def get_stream_analytics_api() -> dict:
         from Backend.logger import LOGGER
         LOGGER.error(f"Stream analytics API error: {e}")
         return {"status": "error", "message": str(e)}
+
+# ---------------------------------------------------------------------------
+# Admin Subscription Management API Routes
+# ---------------------------------------------------------------------------
+
+async def get_subscription_plans_api() -> dict:
+    from Backend import db
+    try:
+        plans = await db.get_subscription_plans()
+        return {"status": "success", "data": plans}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+async def add_subscription_plan_api(payload: dict) -> dict:
+    from Backend import db
+    try:
+        days = int(payload.get("days", 0))
+        price = float(payload.get("price", 0.0))
+        if days <= 0 or price < 0:
+            raise HTTPException(status_code=400, detail="Invalid plan parameters")
+            
+        plan_id = await db.add_subscription_plan(days, price)
+        if plan_id:
+            return {"status": "success", "message": "Plan added successfully", "plan_id": plan_id}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to add plan")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def update_subscription_plan_api(plan_id: str, payload: dict) -> dict:
+    from Backend import db
+    try:
+        days = int(payload.get("days", 0))
+        price = float(payload.get("price", 0.0))
+        if days <= 0 or price < 0:
+             raise HTTPException(status_code=400, detail="Invalid plan parameters")
+             
+        success = await db.update_subscription_plan(plan_id, days, price)
+        if success:
+             return {"status": "success", "message": "Plan updated successfully"}
+        else:
+             raise HTTPException(status_code=404, detail="Plan not found or update failed")
+    except HTTPException:
+         raise
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
+
+async def delete_subscription_plan_api(plan_id: str) -> dict:
+    from Backend import db
+    try:
+        success = await db.delete_subscription_plan(plan_id)
+        if success:
+            return {"status": "success", "message": "Plan deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Plan not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def get_all_subscribers_api() -> dict:
+    from Backend import db
+    try:
+        users = await db.get_all_subscribers()
+        return {"status": "success", "data": users}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
+    from Backend import db
+    try:
+        action = payload.get("action")
+        days = int(payload.get("days", 0))
+        
+        if action not in ["extend", "reduce", "delete"]:
+            raise HTTPException(status_code=400, detail="Invalid action")
+            
+        success = await db.manage_subscriber(user_id, action, days)
+        if success:
+            return {"status": "success", "message": "User subscription updated successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found or update failed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Access Management API ---
+
+async def get_all_tokens_api() -> dict:
+    from Backend import db
+    from Backend.config import Telegram
+    from datetime import datetime
+    try:
+        tokens = await db.get_all_api_tokens()
+        now = datetime.utcnow()
+        result = []
+
+        # Pre-load all subscribers into a dict keyed by user_id for O(1) lookup
+        subscriber_map = {}       # user_id (str) -> user doc
+        if Telegram.SUBSCRIPTION:
+            try:
+                for u in await db.get_all_subscribers():
+                    uid = str(u.get("_id"))
+                    subscriber_map[uid] = u
+            except Exception:
+                pass
+
+        def display_name(user, user_id, token_name=None):
+            """Return a non-empty display name for a user."""
+            if user:
+                n = user.get("first_name") or user.get("username")
+                if n:
+                    return n
+            # Fall back to the name stored on the token itself (set at creation time)
+            if token_name:
+                return token_name
+            return f"User {user_id}" if user_id else "Telegram User"
+
+        def build_entry(user_id, user, token_doc):
+            """Build a unified access entry from optional user + token records."""
+            expiry = None
+            sub_status = None
+            user_found = bool(user)
+
+            if user:
+                sub_status = user.get("subscription_status")
+                expiry = user.get("subscription_expiry")
+
+            # Token-level expiry as fallback
+            if token_doc:
+                t_expiry = token_doc.get("subscription_expiry") or token_doc.get("expires_at")
+                if t_expiry and not expiry:
+                    expiry = t_expiry
+
+            # Determine status
+            if Telegram.SUBSCRIPTION:
+                if not user_found:
+                    is_expired = True
+                elif sub_status != "active":
+                    is_expired = True
+                elif not expiry:
+                    is_expired = True
+                else:
+                    is_expired = expiry < now
+            else:
+                is_expired = bool(expiry and expiry < now)
+
+            token_str = token_doc.get("token") if token_doc else None
+            created = token_doc.get("created_at") if token_doc else (user.get("created_at") if user else None)
+
+            return {
+                "token": token_str,
+                "user_id": user_id,
+                "user_name": display_name(user, user_id, token_doc.get("name") if token_doc else None),
+                "user_found": user_found,
+                "has_token": bool(token_str),
+                "created_at": created.isoformat() if created else None,
+                "expires_at": expiry.isoformat() if expiry else None,
+                "is_expired": is_expired,
+                "sub_status": sub_status,
+                "addon_url": (
+                    f"{Telegram.BASE_URL}/stremio/{token_str}/manifest.json"
+                    if token_str else None
+                ),
+            }
+
+        # Track user_ids that are already represented via a token row
+        seen_user_ids = set()
+
+        # --- 1. Process all existing tokens ---
+        for t in tokens:
+            token_user_id = t.get("user_id")
+
+            # Try to resolve user from subscriber_map using token's user_id
+            user = None
+            if token_user_id:
+                uid_str = str(token_user_id)
+                user = subscriber_map.get(uid_str)
+                if not user:
+                    # Fallback: query DB if not in subscriber_map (e.g. non-active subscribers)
+                    try:
+                        user = await db.get_user(int(token_user_id))
+                    except Exception:
+                        pass
+                seen_user_ids.add(uid_str)
+
+            result.append(build_entry(token_user_id, user, t))
+
+        # --- 2. Add subscribers who have NO token ---
+        for uid_str, u in subscriber_map.items():
+            if uid_str in seen_user_ids:
+                continue  # already covered by a token row
+            result.append(build_entry(u.get("_id"), u, None))
+
+        # Sort: active-with-token first, then active-no-token, expired last
+        result.sort(key=lambda x: (x["is_expired"], not x["has_token"]))
+        return {"tokens": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def revoke_token_api(token: str) -> dict:
+    from Backend import db
+    try:
+        success = await db.revoke_api_token(token)
+        if success:
+            return {"status": "success", "message": "Token revoked."}
+        raise HTTPException(status_code=404, detail="Token not found.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def assign_plan_api(user_id: int, days: int) -> dict:
+    """Assign (or extend) a subscription for any user by user_id, even if not in DB."""
+    from Backend import db
+    try:
+        if days < 1:
+            raise HTTPException(status_code=400, detail="Days must be at least 1.")
+        result = await db.assign_subscription(user_id, days)
+        return {"status": "success", "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def link_token_user_api(token: str, user_id: int) -> dict:
+    """Link an orphan token (no user_id) to a Telegram user_id."""
+    from Backend import db
+    try:
+        success = await db.link_token_user(token, user_id)
+        if success:
+            return {"status": "success", "message": f"Token linked to user {user_id}."}
+        raise HTTPException(status_code=404, detail="Token not found or already linked.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

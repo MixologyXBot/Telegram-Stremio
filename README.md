@@ -25,6 +25,12 @@
 - [🚀 Introduction](#-introduction)
   - [✨ Key Features](#-key-features)
   - [🆕 New Features](#-new-features)
+  - [� Subscription Management](#-subscription-management)
+  - [💳 Subscription Management](#-subscription-management-config)
+  - [📋 Plans](#-subscription-plans)
+  - [🤖 Bot Payment Flow](#-bot-payment-flow)
+  - [🗃️ Access Management](#️-access-management)
+  - [🎬 Stremio Addon Integration](#-stremio-addon-integration)
 - [⚙️ How It Works](#️-how-it-works)
   - [Overview](#overview)
   - [Upload Guidelines](#upload-guidelines)
@@ -41,8 +47,10 @@
   - [🌐 Server](#-server)
   - [🔄 Update Settings](#-update-settings)
   - [🔐 Admin Panel](#-admin-panel)
+
   - [🧰 Additional CDN Bots (Multi-Token System)](#-additional-cdn-bots-multi-token-system)
-- [🚀 Deployment Guide](#-deployment-guide)
+
+- [�🚀 Deployment Guide](#-deployment-guide)
   - [✅ Recommended Prerequisites](#-recommended-prerequisites)
   - [🐙 Heroku Guide](#-heroku-guide)
   - [🐳 VPS Guide (Recommended)](#-vps-guide)
@@ -66,6 +74,18 @@ This project is a **next-generation Telegram Stremio Media Server** that allows 
 - 🎬 **IMDB and TMDB Metadata Integration** 
 - ♾️ **No File Expiration** 
 - 🧠 **Admin Panel Support** 
+- 💳 **Subscription Management** — Plans, payment approval, auto token generation, and expiry enforcement
+- 🔐 **Access Management** — View, extend, reduce, revoke, and reassign subscriptions from the admin UI
+
+
+## 🆕 New Features
+
+- ⚡ **Speed Test** – Speed testing added for all bots on each file to optimize streaming performance.
+- 🔄 **Improved Load Balancer** – Enhanced load balancing algorithm for better traffic distribution across multiple tokens.
+- 🚫 **Failed Bot Management** – Max failed bots will be marked as shadow or idle for buffer optimization. This is due to some data center bots having rate-limiting constraints.
+- 📊 **Bot-wise Analysis** – Detailed bot performance analytics available in the admin dashboard for monitoring and optimization.
+- 🧹 **Deleted File Detection** – Automatic detection of deleted files on every restart, with admin capability to manually remove them from the database.
+- 🛠️ **Additional Admin Features** – Various small enhancements and improvements for administrators.
 
 
 ## 🆕 New Features
@@ -270,6 +290,19 @@ All environment variables for this project are defined in the `config.env` file.
 | **`ADMIN_PASSWORD`** | Password for Admin Panel access.|
  **⚠️ Change from default values for security.** 
 
+### 💳 Subscription Management Config
+
+Enable the subscription feature to gate access to streams behind a paid plan. When `SUBSCRIPTION=True`, every user must have an active subscription to stream content.
+
+| Variable | Description |
+| :--- | :--- |
+| **`SUBSCRIPTION`** | Enable (`True`) or disable (`False`) the subscription gate. When enabled, users without an active subscription see an expired message in Stremio instead of streams. *Default: `False`*. |
+| **`SUBSCRIPTION_GROUP_ID`** | Telegram **group/channel ID** where approved subscribers are invited. Users receive an invite link upon payment approval. |
+| **`APPROVER_IDS`** | Comma-separated Telegram user IDs of admins who can **approve or reject** subscription payment requests. |
+| **`SUBSCRIPTION_URL`** | Telegram bot URL (e.g. `https://t.me/your_bot`) shown to expired users in Stremio so they can renew. |
+
+> 💡 `SUBSCRIPTION_GROUP_ID` and `APPROVER_IDS` must be set **without quotes** in `config.env`.
+
 ### 🧰 Additional CDN Bots (Multi-Token System)
 
 | Variable | Description |
@@ -286,6 +319,137 @@ To avoid this, you can use **MULTI_TOKEN** system:
 - Add the tokens in your `config.env` as `MULTI_TOKEN1`, `MULTI_TOKEN2`, `MULTI_TOKEN3`, and so on.
 - The system will automatically distribute the load among all these bots!
 
+
+---
+
+# 💳 Subscription Management
+
+The Subscription Management system allows you to **monetise access** to your Telegram Stremio server. When enabled, users must have an active subscription to stream content.
+
+## 📋 Subscription Plans
+
+Admins can create and manage subscription plans from the **Admin Panel → Subscription Management** page.
+
+Each plan has:
+- **Name** (e.g. `Monthly`, `Quarterly`)
+- **Duration** in days
+- **Price** (for display)
+- **Description**
+
+Plans are stored in MongoDB and can be added, edited, or deleted at any time without restarting.
+
+---
+
+## 🤖 Bot Payment Flow
+
+Users interact with the bot to subscribe:
+
+```
+User → /start → selects plan → sends payment screenshot
+      → Approver gets notification → Approve / Reject
+      → On Approve:
+          ✅ Subscription saved to DB
+          🔑 Stremio addon token auto-generated
+          📨 User receives Stremio install link + group invite
+```
+
+**Approver actions** (available to `APPROVER_IDS`):
+
+| Button | Action |
+| :--- | :--- |
+| ✅ Approve | Activates subscription, generates addon token, invites user to group |
+| ❌ Reject | Notifies user with rejection message |
+
+---
+
+## 🗃️ Access Management
+
+The **Admin Panel → Access Management** page gives admins full control over all users and their addon tokens.
+
+### Columns Shown
+
+| Column | Description |
+| :--- | :--- |
+| Status | 🟢 Active / 🔴 Expired |
+| User | Display name or `User {id}` |
+| Addon Link | Stremio install URL + copy button |
+| Created | Token creation date |
+| Expires | Subscription expiry date |
+| Actions | Buttons for managing the user |
+
+### Action Buttons
+
+| Button | Description |
+| :--- | :--- |
+| 📅 **Assign** | Assign or extend a subscription plan (adds days) |
+| ➕ **Extend** | Add extra days to an active subscription |
+| ➖ **Reduce** | Subtract days from an active subscription |
+| 🚫 **Revoke** | Wipe subscription entirely (marks expired) |
+| 🗑️ **Del Token** | Delete the addon token only (user still subscribed) |
+| 🔗 **Link User ID** | Link an old/orphan token to a Telegram user ID to enable management |
+
+> 💡 Manually created (old) tokens that have no linked user ID show a **🔗 Link User ID** button. Once linked, all action buttons become available.
+
+### Search & Filtering
+
+- 🔍 Search by user name or ID
+- Filter by status: All / Active / Expired
+- Pagination with configurable page size
+
+---
+
+## 🎬 Stremio Addon Integration
+
+### Per-User Addon Token
+
+Each user gets a **unique addon token** automatically generated on payment approval. Their Stremio addon URL is:
+
+```
+https://your-domain.com/stremio/{token}/manifest.json
+```
+
+### Dynamic Manifest
+
+The addon manifest updates dynamically per user:
+
+| Scenario | Addon Name | Description |
+| :--- | :--- | :--- |
+| Active, has expiry | `Telegram — Expires 28 Mar 2026` | 📅 Subscription active until 28 Mar 2026 |
+| Active, no expiry | `Telegram — Active` | ✅ Subscription active |
+| Default (no subscription mode) | `Telegram` | Standard description |
+
+The manifest `version` encodes the expiry date — when an admin extends or revokes a subscription, the version changes and Stremio detects an update.
+
+### Expired Stream
+
+When a user's subscription expires, instead of streams they see:
+
+```json
+{
+  "name": "🚫 Subscription Expired",
+  "title": "Your subscription has expired.\nRenew via the bot to continue watching.",
+  "url": "https://t.me/your_bot"   ← SUBSCRIPTION_URL from config
+}
+```
+
+Clicking the stream name opens the bot directly for renewal.
+
+### Configure & Reinstall Page
+
+Every addon has a **Configure page** at:
+
+```
+https://your-domain.com/stremio/{token}/configure
+```
+
+This page shows:
+- User name, subscription status, expiry date
+- **⚡ Install / Update in Stremio** button (Stremio Web install flow)
+- Manual install steps + **📋 Copy URL** button
+
+The ⚙️ gear icon in Stremio opens this page so users can reinstall after an admin updates their subscription.
+
+---
 
 # 🚀 Deployment Guide
 
@@ -552,6 +716,6 @@ If you want to use **only** your **Telegram Stremio Media Server addon** for met
 
 |<img width="80" src="https://avatars.githubusercontent.com/u/113664541">|<img width="80" src="https://avatars.githubusercontent.com/u/13152917">|<img width="80" src="https://avatars.githubusercontent.com/u/14957082">|<img width="80" src="https://raw.githubusercontent.com/vflixa1prime/Readme/main/VFlixPRime.png">|
 |:---:|:---:|:---:|:---:|
-|[`Karan`](https://github.com/Weebzone)|[`Stremio`](https://github.com/Stremio)|[`ChatGPT`](https://github.com/OPENAI)|[`VFlix Prime`](https://t.me/vflixprime)|
+|[`Karan`](https://github.com/Weebzone)|[`Stremio`](https://github.com/Stremio)|[`ChatGPT`](https://github.com/OPENAI)|[`VFlix Prime`](https://t.me/vflixprime2)|
 |Author|Stremio SDK|Refactor|Community Support
 
