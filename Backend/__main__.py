@@ -49,6 +49,13 @@ async def start_services():
         link_checker_task = DeadLinkChecker(db, app, check_interval_hours=24)
         loop.create_task(link_checker_task.start())
         
+        # Start Subscription Background Task
+        from Backend.config import Telegram
+        if Telegram.SUBSCRIPTION:
+            from Backend.helper.subscription_checker import subscription_checker_loop
+            loop.create_task(subscription_checker_loop(StreamBot))
+            LOGGER.info("Subscription Checker Task Started.")
+        
         LOGGER.info("Telegram-Stremio Started Successfully!")
         await idle()
     except Exception:

@@ -10,7 +10,7 @@ from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     login_page, login_post, logout, set_theme, dashboard_page,
     media_management_page, edit_media_page, public_status_page, stremio_guide_page,
-    admin_dashboard_page
+    admin_dashboard_page, admin_subscriptions_page, admin_access_page
 )
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
@@ -19,7 +19,11 @@ from Backend.fastapi.routes.api_routes import (
     create_token_api, revoke_token_api, update_token_limits_api,
     speed_test_api, speed_test_stream_api,
     get_admin_stats_api, clear_cache_api, get_dead_links_api,
-    get_stream_analytics_api
+    get_stream_analytics_api,
+    get_subscription_plans_api, add_subscription_plan_api,
+    update_subscription_plan_api, delete_subscription_plan_api,
+    get_all_subscribers_api, manage_subscriber_api,
+    get_all_tokens_api, assign_plan_api, link_token_user_api
 )
 
 app = FastAPI(
@@ -175,6 +179,61 @@ async def get_dead_links(_: bool = Depends(require_auth)):
 @app.get("/api/admin/stream-analytics")
 async def get_stream_analytics(_: bool = Depends(require_auth)):
     return await get_stream_analytics_api()
+
+@app.get("/admin/subscriptions", response_class=HTMLResponse)
+async def admin_subscriptions(request: Request, _: bool = Depends(require_auth)):
+    return await admin_subscriptions_page(request, _)
+
+@app.get("/api/admin/subscriptions/plans")
+async def get_subscription_plans(_: bool = Depends(require_auth)):
+    return await get_subscription_plans_api()
+
+@app.post("/api/admin/subscriptions/plans")
+async def add_subscription_plan(payload: dict, _: bool = Depends(require_auth)):
+    return await add_subscription_plan_api(payload)
+
+@app.put("/api/admin/subscriptions/plans/{plan_id}")
+async def update_subscription_plan(plan_id: str, payload: dict, _: bool = Depends(require_auth)):
+    return await update_subscription_plan_api(plan_id, payload)
+
+@app.delete("/api/admin/subscriptions/plans/{plan_id}")
+async def delete_subscription_plan(plan_id: str, _: bool = Depends(require_auth)):
+    return await delete_subscription_plan_api(plan_id)
+
+@app.get("/api/admin/subscriptions/users")
+async def get_subscribers(_: bool = Depends(require_auth)):
+    return await get_all_subscribers_api()
+
+@app.post("/api/admin/subscriptions/users/{user_id}/manage")
+async def manage_subscriber(user_id: int, payload: dict, _: bool = Depends(require_auth)):
+    return await manage_subscriber_api(user_id, payload)
+
+# --- Access Management ---
+@app.get("/admin/access", response_class=HTMLResponse)
+async def admin_access(request: Request, _: bool = Depends(require_auth)):
+    return await admin_access_page(request, _)
+
+@app.get("/api/admin/access/tokens")
+async def get_access_tokens(_: bool = Depends(require_auth)):
+    return await get_all_tokens_api()
+
+@app.delete("/api/admin/access/tokens/{token}")
+async def delete_access_token(token: str, _: bool = Depends(require_auth)):
+    from Backend.fastapi.routes.api_routes import revoke_token_api as _revoke_token_api
+    return await _revoke_token_api(token)
+
+@app.post("/api/admin/access/users/{user_id}/assign-plan")
+async def assign_access_plan(user_id: int, payload: dict, _: bool = Depends(require_auth)):
+    days = int(payload.get("days", 0))
+    return await assign_plan_api(user_id, days)
+
+@app.patch("/api/admin/access/tokens/{token}/link-user")
+async def link_token_to_user(token: str, payload: dict, _: bool = Depends(require_auth)):
+    user_id = int(payload.get("user_id", 0))
+    if not user_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="user_id is required.")
+    return await link_token_user_api(token, user_id)
 
 @app.get("/api/system/speedtest")
 async def speed_test(

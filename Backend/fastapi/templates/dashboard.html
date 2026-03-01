@@ -669,50 +669,51 @@
             const response = await fetch('/stream/stats');
             if (response.ok) {
                 const data = await response.json();
-                const activeStreams = data.active_streams || [];
+                const allStreams = data.active_streams || [];
                 const container = document.getElementById('active-streams-container');
+                // Only show streams that are actively sending data
+                const liveStreams = allStreams.filter(s => s.status === 'active' && (s.total_bytes || 0) > 0);
 
-                if (container) {
-                    if (activeStreams.length === 0) {
-                        container.innerHTML = `<div class="p-8 text-center bg-gray-50 border border-dashed rounded-lg">
+                if (liveStreams.length === 0) {
+                    container.innerHTML = `<div class="p-8 text-center bg-gray-50 border border-dashed rounded-lg">
                             <i class="fas fa-video-slash text-gray-300 text-3xl mb-3"></i>
                             <p class="text-gray-500 font-medium">No active streams at the moment</p>
                             <p class="text-xs text-gray-400 mt-1">Users are not currently watching any media.</p>
                         </div>`;
-                    } else {
-                        const escapeHtml = (unsafe) => {
-                            if (!unsafe) return '';
-                            return unsafe
-                                .toString()
-                                .replace(/&/g, "&amp;")
-                                .replace(/</g, "&lt;")
-                                .replace(/>/g, "&gt;")
-                                .replace(/"/g, "&quot;")
-                                .replace(/'/g, "&#039;");
-                        };
+                } else {
+                    const escapeHtml = (unsafe) => {
+                        if (!unsafe) return '';
+                        return unsafe
+                            .toString()
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#039;");
+                    };
 
-                        const formatBytesStr = (bytes) => {
-                            if (bytes === 0) return '0 B';
-                            const k = 1024;
-                            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-                            const i = Math.floor(Math.log(bytes) / Math.log(k));
-                            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-                        };
+                    const formatBytesStr = (bytes) => {
+                        if (bytes === 0) return '0 B';
+                        const k = 1024;
+                        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                    };
 
-                        container.innerHTML = activeStreams.map(stream => {
-                            let statusColor = 'bg-red-100 text-red-800';
-                            let statusPulse = 'hidden';
-                            if (stream.status === 'active') {
-                                statusColor = 'bg-green-100 text-green-800';
-                                statusPulse = '';
-                            } else if (stream.status === 'cancelled') {
-                                statusColor = 'bg-yellow-100 text-yellow-800';
-                            }
+                    container.innerHTML = liveStreams.map(stream => {
+                        let statusColor = 'bg-red-100 text-red-800';
+                        let statusPulse = 'hidden';
+                        if (stream.status === 'active') {
+                            statusColor = 'bg-green-100 text-green-800';
+                            statusPulse = '';
+                        } else if (stream.status === 'cancelled') {
+                            statusColor = 'bg-yellow-100 text-yellow-800';
+                        }
 
-                            const streamIdStr = stream.stream_id ? stream.stream_id.substring(0, 8) + '...' : 'Unknown';
-                            const titleStr = (stream.meta && stream.meta.title) ? stream.meta.title : (stream.title || 'Unknown Stream');
+                        const streamIdStr = stream.stream_id ? stream.stream_id.substring(0, 8) + '...' : 'Unknown';
+                        const titleStr = (stream.meta && stream.meta.title) ? stream.meta.title : (stream.title || 'Unknown Stream');
 
-                            return `
+                        return `
                             <div class="p-4 bg-gray-50 rounded-lg border-l-4 border-green-500">
                                 <div class="flex justify-between items-start mb-3">
                                     <div class="flex items-center gap-2 max-w-[70%]">
@@ -797,13 +798,13 @@
                                 ` : ''}
                             </div>
                             `;
-                        }).join('');
-                    }
+                    }).join('');
                 }
             }
-        } catch (error) {
-            console.error("Failed to update active streams:", error);
         }
+        } catch (error) {
+        console.error("Failed to update active streams:", error);
+    }
     }
 
     // Auto-refresh every 2 minutes

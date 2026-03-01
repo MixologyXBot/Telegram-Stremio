@@ -78,6 +78,217 @@ class Database:
             upsert=True
         )
 
+    # -------------------------------
+    # User Subscription Management
+    # -------------------------------
+    async def get_user(self, user_id: int) -> Optional[dict]:
+        return await self.dbs["tracking"]["users"].find_one({"_id": user_id})
+
+    async def update_user_interaction(self, user_id: int, first_name: str, username: str):
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {"$set": {"first_name": first_name, "username": username, "last_interaction": datetime.utcnow()}},
+            upsert=True
+        )
+
+    async def set_pending_payment(self, user_id: int, plan_duration: int, msg_id: int, price=0, admin_messages: list = None):
+        update_data = {
+            "pending_payment": {
+                "duration": plan_duration,
+                "price": price,
+                "msg_id": msg_id,
+                "date": datetime.utcnow(),
+            }
+        }
+        if admin_messages is not None:
+            update_data["pending_payment"]["admin_messages"] = admin_messages
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {"$set": update_data},
+            upsert=True
+        )
+
+    async def approve_payment(self, user_id: int) -> Optional[dict]:
+        user = await self.get_user(user_id)
+        if not user or "pending_payment" not in user:
+            return None
+
+        duration = user["pending_payment"]["duration"]
+        
+        # Calculate new expiry
+        current_expiry = user.get("subscription_expiry")
+        now = datetime.utcnow()
+        if current_expiry and current_expiry > now:
+            from datetime import timedelta
+            new_expiry = current_expiry + timedelta(days=duration)
+        else:
+            from datetime import timedelta
+            new_expiry = now + timedelta(days=duration)
+
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {
+                "$set": {"subscription_expiry": new_expiry, "subscription_status": "active"},
+                "$unset": {"pending_payment": ""}
+            }
+        )
+        return await self.get_user(user_id)
+
+    async def reject_payment(self, user_id: int) -> bool:
+        result = await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {"$unset": {"pending_payment": ""}}
+        )
+        return result.modified_count > 0
+
+    async def get_expired_users(self) -> List[dict]:
+        cursor = self.dbs["tracking"]["users"].find({
+            "subscription_expiry": {"$lt": datetime.utcnow()},
+            "subscription_status": "active"
+        })
+        return await cursor.to_list(None)
+
+    async def mark_user_expired(self, user_id: int):
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {"$set": {"subscription_status": "expired"}}
+        )
+
+    async def get_expiring_users(self, hours: int = 24) -> List[dict]:
+        from datetime import timedelta
+        now = datetime.utcnow()
+        target_time = now + timedelta(hours=hours)
+        cursor = self.dbs["tracking"]["users"].find({
+            "subscription_expiry": {"$gt": now, "$lte": target_time},
+            "reminder_sent": {"$ne": True},
+            "subscription_status": "active"
+        })
+        return await cursor.to_list(None)
+        
+    async def mark_reminder_sent(self, user_id: int):
+         await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {"$set": {"reminder_sent": True}}
+        )
+
+    # -------------------------------
+    # Admin Subscription Management
+    # -------------------------------
+    async def get_subscription_plans(self) -> List[dict]:
+        cursor = self.dbs["tracking"]["sub_plans"].find().sort("days", ASCENDING)
+        plans = await cursor.to_list(None)
+        return [convert_objectid_to_str(plan) for plan in plans]
+
+    async def add_subscription_plan(self, days: int, price: float) -> Optional[str]:
+        result = await self.dbs["tracking"]["sub_plans"].insert_one({
+            "days": days,
+            "price": price,
+            "created_at": datetime.utcnow()
+        })
+        return str(result.inserted_id)
+
+    async def update_subscription_plan(self, plan_id: str, days: int, price: float) -> bool:
+        try:
+            result = await self.dbs["tracking"]["sub_plans"].update_one(
+                {"_id": ObjectId(plan_id)},
+                {"$set": {"days": days, "price": price, "updated_at": datetime.utcnow()}}
+            )
+            return result.modified_count > 0
+        except Exception:
+            return False
+
+    async def delete_subscription_plan(self, plan_id: str) -> bool:
+        try:
+            result = await self.dbs["tracking"]["sub_plans"].delete_one({"_id": ObjectId(plan_id)})
+            return result.deleted_count > 0
+        except Exception:
+            return False
+
+    async def get_all_subscribers(self) -> List[dict]:
+        cursor = self.dbs["tracking"]["users"].find({
+            "subscription_status": {"$in": ["active", "expired"]}
+        }).sort("subscription_expiry", DESCENDING)
+        users = await cursor.to_list(None)
+        return [convert_objectid_to_str(u) for u in users]
+
+    async def manage_subscriber(self, user_id: int, action: str, days: int = 0) -> bool:
+        user = await self.get_user(user_id)
+        if not user:
+            return False
+            
+        now = datetime.utcnow()
+        if action == "extend" or action == "reduce":
+            from datetime import timedelta
+            current_expiry = user.get("subscription_expiry")
+            
+            if action == "extend":
+                if current_expiry and current_expiry > now:
+                    new_expiry = current_expiry + timedelta(days=days)
+                else:
+                    new_expiry = now + timedelta(days=days)
+            else: # reduce
+                if current_expiry:
+                    new_expiry = current_expiry - timedelta(days=days)
+                    if new_expiry < now:
+                        new_expiry = now # Just expire them
+                else:
+                    new_expiry = now # Already expired or none
+            
+            status = "active" if new_expiry > now else "expired"
+            
+            result = await self.dbs["tracking"]["users"].update_one(
+                {"_id": user_id},
+                {"$set": {"subscription_expiry": new_expiry, "subscription_status": status}}
+            )
+            return result.modified_count > 0
+            
+        elif action == "delete":
+            result = await self.dbs["tracking"]["users"].update_one(
+                {"_id": user_id},
+                {"$unset": {"subscription_expiry": "", "subscription_status": ""}}
+            )
+            return result.modified_count > 0
+            
+        return False
+
+    async def assign_subscription(self, user_id: int, days: int) -> dict:
+        """Upsert a subscription for any user_id, creating a record if it doesn't exist."""
+        from datetime import timedelta
+        now = datetime.utcnow()
+
+        user = await self.get_user(user_id)
+        if user:
+            current_expiry = user.get("subscription_expiry")
+            if current_expiry and current_expiry > now:
+                new_expiry = current_expiry + timedelta(days=days)
+            else:
+                new_expiry = now + timedelta(days=days)
+        else:
+            new_expiry = now + timedelta(days=days)
+
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "subscription_expiry": new_expiry,
+                    "subscription_status": "active",
+                },
+                "$setOnInsert": {
+                    "_id": user_id,
+                    "first_name": f"User {user_id}",
+                    "username": None,
+                    "created_at": now,
+                }
+            },
+            upsert=True
+        )
+        return {
+            "user_id": user_id,
+            "subscription_expiry": new_expiry.isoformat(),
+            "subscription_status": "active",
+            "days_assigned": days,
+        }
+
 
     # -------------------------------
     # Helper Methods for Repeated Logic
@@ -938,13 +1149,20 @@ class Database:
     # API Token Methods
     # -------------------------------
 
-    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None) -> dict:
+    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None, user_id: int = None) -> dict:
+        # If a user_id is provided, return existing token if already created
+        if user_id:
+            existing = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
+            if existing:
+                return convert_objectid_to_str(existing)
+
         alphabet = string.ascii_letters + string.digits
         token = ''.join(secrets.choice(alphabet) for _ in range(32))
         
         token_doc = {
             "name": name,
             "token": token,
+            "user_id": user_id,
             "created_at": datetime.utcnow(),
             "limits": {
                 "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
@@ -972,6 +1190,14 @@ class Database:
     async def revoke_api_token(self, token: str) -> bool:
         result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
         return result.deleted_count > 0
+
+    async def link_token_user(self, token: str, user_id: int) -> bool:
+        """Link an existing token to a Telegram user_id."""
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {"user_id": user_id}}
+        )
+        return result.modified_count > 0
 
     async def update_token_usage(self, token: str, bytes_delta: int):
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
