@@ -13,6 +13,7 @@ from pyrogram.enums.parse_mode import ParseMode
 
 
 file_queue = Queue()
+edit_queue = Queue()
 db_lock = Lock()
 
 async def process_file():
@@ -26,8 +27,30 @@ async def process_file():
                 LOGGER.info("Update failed due to validation errors.")
         file_queue.task_done()
 
+async def process_edit():
+    while True:
+        chat_id, msg_id, new_caption, log_msg = await edit_queue.get()
+        try:
+            await asleep(5)
+            LOGGER.info(f"Editing Caption for Message ID: {msg_id}: {log_msg}")
+            await edit_message(
+                chat_id=chat_id,
+                msg_id=msg_id,
+                new_caption=new_caption
+            )
+        except FloodWait as e:
+            LOGGER.warning(f"FloodWait {e.value}s while editing")
+            await asleep(e.value)
+        except Exception as e:
+            LOGGER.error(f"Edit failed for {msg_id}: {e}")
+        finally:
+            edit_queue.task_done()
+
 for _ in range(1):
     create_task(process_file())
+
+for _ in range(1):
+    create_task(process_edit())
 
 
 @Client.on_message(filters.channel & (filters.document | filters.video))
@@ -46,16 +69,19 @@ async def file_receive_handler(client: Client, message: Message):
                     LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
                     return
 
-                title = remove_urls(title)
+                original_title = title
+                title = (title.split('.mkv')[0] + '.mkv') if '.mkv' in title else (title.split('.mp4')[0] + '.mp4') if '.mp4' in title else title
                 if not title.endswith(('.mkv', '.mp4')):
                     title += '.mkv'
 
-                if Backend.USE_DEFAULT_ID:
-                    new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
-                    create_task(edit_message(
-                        chat_id=message.chat.id,
-                        msg_id=message.id,
-                        new_caption=new_caption
+                if title != original_title or Backend.USE_DEFAULT_ID:
+                    new_caption = (title + "\n\n" + Backend.USE_DEFAULT_ID) if Backend.USE_DEFAULT_ID else title
+                    log_msg = f"{metadata_info.get('title')} S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}" if metadata_info.get('season_number') else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+                    await edit_queue.put((
+                        message.chat.id,
+                        message.id,
+                        new_caption,
+                        log_msg
                     ))
 
                 await file_queue.put((metadata_info, int(channel), msg_id, size, title))
