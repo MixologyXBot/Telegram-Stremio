@@ -145,6 +145,8 @@ async def restart_notification():
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
+    BotCommand("imdb", "🔎 [query] or ttxxxxxx Get IMDB info"),
+    BotCommand("scrape", "👾 Scrape direct links from GDFlix, HubCloud etc"),
     BotCommand("channels", "📡 List AUTH channels"),
     BotCommand("addchannel", "➕ Add a channel"),
     BotCommand("removechannel", "➖ Remove a channel"),
