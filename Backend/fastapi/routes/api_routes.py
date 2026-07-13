@@ -1509,7 +1509,7 @@ async def update_settings_api(payload: dict) -> dict:
                     )
 
     #----- Strip whitespace from string fields
-    for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
+    for key in ("tmdb_api", "scrape_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "payment_instructions", "payment_qr_url", "announcement_channel"):
         if key in payload and isinstance(payload[key], str):

@@ -14,7 +14,7 @@ _DEFAULTS: Dict[str, Any] = {
     "auth_channels": [],
     "tmdb_api": "",
     "base_url": "",
-    "upstream_repo": "https://github.com/weebzone/Telegram-Stremio",
+    "upstream_repo": "https://github.com/MixologyXBot/Telegram-Stremio",
     "upstream_branch": "master",
     "admin_username": "admin",
     "admin_password": "admin",
@@ -45,6 +45,7 @@ def _seed_from_env() -> Dict[str, Any]:
         "hide_catalog":                 Telegram.HIDE_CATALOG,
         "auth_channels":                list(Telegram.AUTH_CHANNEL),
         "tmdb_api":                     Telegram.TMDB_API,
+        "scrape_api":                   Telegram.SCRAPE_API,
         "base_url":                     Telegram.BASE_URL,
         "upstream_repo":                Telegram.UPSTREAM_REPO,
         "upstream_branch":              Telegram.UPSTREAM_BRANCH,
@@ -117,6 +118,10 @@ class Settings:
     @property
     def tmdb_api(self) -> str:
         return str(self._d.get("tmdb_api") or "")
+
+    @property
+    def scrape_api(self) -> str:
+        return str(self._d.get("scrape_api") or "").rstrip("/")
 
     @property
     def base_url(self) -> str:

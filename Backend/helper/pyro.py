@@ -216,6 +216,7 @@ async def restart_notification():
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
+    BotCommand("scrape", "👾 Scrape direct links from GDFlix, HubCloud."),
 ]
 
 
