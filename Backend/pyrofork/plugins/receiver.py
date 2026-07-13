@@ -17,6 +17,7 @@ from Backend.helper.metadata import extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import parse_split_info
+from Backend.helper.task_manager import edit_message, delete_message
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
 from Backend.logger import LOGGER
 
@@ -227,6 +228,15 @@ async def file_receive_handler(client: Client, message: Message):
             return
 
         title = _finalize_title(title, metadata_info)
+        log_msg = (
+            f"{metadata_info.get('title')} "
+            f"S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}"
+            if metadata_info.get('season_number')
+            else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+        )
+        if not title == message.caption:
+            LOGGER.info(f"Editing Caption for Message ID {message.id}: {log_msg}")
+            create_task(edit_message(chat_id=message.chat.id, msg_id=message.id, new_caption=title))
 
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
     except FloodWait as e:
