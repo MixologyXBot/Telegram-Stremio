@@ -234,7 +234,7 @@ async def file_receive_handler(client: Client, message: Message):
             if metadata_info.get('season_number')
             else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
         )
-        if not title == message.caption:
+        if not title == message.caption and not metadata_info.get('group_key'):
             LOGGER.info(f"Editing Caption for Message ID {message.id}: {log_msg}")
             create_task(edit_message(chat_id=message.chat.id, msg_id=message.id, new_caption=title))
 
