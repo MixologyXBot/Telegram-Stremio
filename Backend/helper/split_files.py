@@ -2,7 +2,7 @@ import re
 from typing import Optional, Tuple
 
 _VIDEO_EXTENSIONS = r'mkv|mp4|avi|ts|m4v|mov|wmv|webm|flv|m2ts|mpg|mpeg'
-_TRAILING_NUMERIC_PATTERN = re.compile(rf'(?i)\.({_VIDEO_EXTENSIONS})\.(\d{{2,3}})$')
+_TRAILING_NUMERIC_PATTERN = re.compile(rf'(?i)\.({_VIDEO_EXTENSIONS})\.(\d{{2,3}})(?=$|\D)')
 _NORMALIZE_RE = re.compile(r'[\.\-_ ]+')
 
 
