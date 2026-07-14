@@ -12,6 +12,7 @@ from Backend.helper.metadata import metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
+from Backend.helper.task_manager import edit_message
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -481,6 +482,16 @@ class ScanManager:
             return
 
         title_clean = finalize_media_name(title, bool(metadata_info.get('group_key')))
+
+        log_msg = (
+            f"{metadata_info.get('title')} "
+            f"S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}"
+            if metadata_info.get('season_number')
+            else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+        )
+        if not title_clean == message.caption and not metadata_info.get('group_key'):
+            LOGGER.info(f"Editing Caption for Message ID {message.id}: {log_msg}")
+            asyncio.create_task(edit_message(chat_id=chat_id, msg_id=message.id, new_caption=title_clean))
 
         try:
             async with self._db_lock:
