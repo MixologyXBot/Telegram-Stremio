@@ -404,6 +404,9 @@ class Database:
                 },
                 upsert=True
             )
+            if status == "active":
+                await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
+            await self.align_token_with_subscription(user_id)
             return True
 
         elif action == "delete":
@@ -411,11 +414,22 @@ class Database:
                 {"_id": user_id},
                 {"$set": {"subscription_status": "expired", "subscription_expiry": now}}
             )
+            await self.align_token_with_subscription(user_id)
+            return True
+
+        elif action == "remove":
+            await self.align_token_with_subscription(user_id)
+            await self.dbs["tracking"]["users"].delete_one({"_id": user_id})
             return True
 
         return False
 
-    async def assign_subscription(self, user_id: int, days: int) -> dict:
+    #----- Update a subscriber's display name (and the linked token's name)
+    async def update_subscriber_name(self, user_id: int, name: str) -> None:
+        await self.dbs["tracking"]["users"].update_one({"_id": user_id}, {"$set": {"first_name": name}})
+        await self.dbs["tracking"]["api_tokens"].update_one({"user_id": user_id}, {"$set": {"name": name}})
+
+    async def assign_subscription(self, user_id: int, days: int, name: str = None) -> dict:
         #----- Upsert a subscription for any user_id, creating a record if it doesn't exist
         now = datetime.utcnow()
 
@@ -429,27 +443,58 @@ class Database:
         else:
             new_expiry = now + timedelta(days=days)
 
+        set_fields = {"subscription_expiry": new_expiry, "subscription_status": "active"}
+        insert_fields = {"_id": user_id, "username": None, "created_at": now}
+        if name:
+            set_fields["first_name"] = name
+        else:
+            insert_fields["first_name"] = f"User {user_id}"
+
         await self.dbs["tracking"]["users"].update_one(
             {"_id": user_id},
-            {
-                "$set": {
-                    "subscription_expiry": new_expiry,
-                    "subscription_status": "active",
-                },
-                "$setOnInsert": {
-                    "_id": user_id,
-                    "first_name": f"User {user_id}",
-                    "username": None,
-                    "created_at": now,
-                }
-            },
+            {"$set": set_fields, "$setOnInsert": insert_fields},
             upsert=True
         )
+        token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
+        token = token_doc.get("token") if token_doc else None
+        await self.align_token_with_subscription(user_id)
         return {
             "user_id": user_id,
             "subscription_expiry": new_expiry.isoformat(),
             "subscription_status": "active",
             "days_assigned": days,
+            "token": token,
+            "addon_url": (
+                f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json" if token else None
+            ),
+        }
+
+    #----- Give a user's token never-expiring access (clears any expiry date)
+    async def set_user_never_expires(self, user_id: int, name: str = None) -> dict:
+        now = datetime.utcnow()
+        user = await self.get_user(user_id)
+        set_fields = {"subscription_status": "active"}
+        insert_fields = {"username": None, "created_at": now}
+        if name:
+            set_fields["first_name"] = name
+        else:
+            insert_fields["first_name"] = f"User {user_id}"
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {"$set": set_fields, "$unset": {"subscription_expiry": ""}, "$setOnInsert": insert_fields},
+            upsert=True,
+        )
+        token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
+        token = token_doc.get("token") if token_doc else None
+        if token:
+            await self.set_token_lifetime(token, True)
+        return {
+            "user_id": user_id,
+            "never_expires": True,
+            "token": token,
+            "addon_url": (
+                f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json" if token else None
+            ),
         }
 
     #-----
@@ -1938,7 +1983,7 @@ class Database:
     #----- API Token Methods
     #-----
 
-    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None, user_id: int = None) -> dict:
+    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None, user_id: int = None, subscription_exempt: bool = False) -> dict:
         #----- If a user_id is provided, return existing token if already created
         if user_id:
             existing = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
@@ -1947,12 +1992,14 @@ class Database:
 
         alphabet = string.ascii_letters + string.digits
         token = ''.join(secrets.choice(alphabet) for _ in range(32))
-        
+
         token_doc = {
             "name": name,
             "token": token,
             "user_id": user_id,
             "is_admin": self._is_owner(user_id),
+            "subscription_exempt": bool(subscription_exempt),
+            "expires_at": None,
             "created_at": datetime.utcnow(),
             "limits": {
                 "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
@@ -1964,12 +2011,99 @@ class Database:
                 "monthly": {"month": datetime.now(timezone.utc).strftime("%Y-%m"), "bytes": 0}
             }
         }
-        
+
         await self.dbs["tracking"]["api_tokens"].insert_one(token_doc)
         return convert_objectid_to_str(token_doc)
 
+    #----- Return the user's token, creating one if none exists
+    async def ensure_api_token_for_user(self, user_id: int, name: str = None) -> Optional[dict]:
+        if not user_id:
+            return None
+        existing = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
+        if existing:
+            return convert_objectid_to_str(existing)
+        return await self.add_api_token(name or f"User {user_id}", user_id=user_id)
+
+    #----- Make a user's token follow their subscription: drop any standalone
+    #----- grant (never-expires / token-expiry) so revoke/extend actually apply.
+    #----- No-op when subscription mode is off (token keeps its own expiry there).
+    async def align_token_with_subscription(self, user_id: int) -> None:
+        if not SettingsManager.current().subscription:
+            return
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
+        if doc:
+            await self.dbs["tracking"]["api_tokens"].update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"subscription_exempt": False, "expires_at": None}},
+            )
+
+    #----- Toggle a token's lifetime (subscription-exempt) flag
+    async def set_token_lifetime(self, token: str, exempt: bool) -> bool:
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token}, {"$set": {"subscription_exempt": bool(exempt)}}
+        )
+        return result.modified_count > 0
+
+    #----- Set/extend/reduce a token's own expiry (used when subscription mode is off).
+    #----- 'set' with 0/None days clears the expiry (never expires).
+    async def update_token_expiry(self, token: str, action: str = "set", days: int = 0) -> Optional[dict]:
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        if not doc:
+            return None
+        now = datetime.utcnow()
+        current = doc.get("expires_at")
+        if action == "set":
+            new_expiry = now + timedelta(days=days) if days and days > 0 else None
+        elif action == "extend":
+            base = current if (current and current > now) else now
+            new_expiry = base + timedelta(days=days)
+        elif action == "reduce":
+            base = current if current else now
+            new_expiry = base - timedelta(days=days)
+            if new_expiry < now:
+                new_expiry = now
+        else:
+            return None
+        await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {"expires_at": new_expiry, "subscription_exempt": new_expiry is None}},
+        )
+        return await self.get_api_token(token)
+
+    #----- Mark every token that isn't linked to a user as lifetime
+    async def grant_lifetime_to_unlinked(self) -> int:
+        result = await self.dbs["tracking"]["api_tokens"].update_many(
+            {"$or": [{"user_id": None}, {"user_id": {"$exists": False}}]},
+            {"$set": {"subscription_exempt": True}},
+        )
+        return result.modified_count
+
+    #----- Count tokens that would stop working if subscription mode is enabled
+    async def count_uncovered_tokens(self) -> int:
+        tokens = await self.get_all_api_tokens()
+        now = datetime.utcnow()
+        count = 0
+        for t in tokens:
+            if t.get("is_admin") or t.get("subscription_exempt"):
+                continue
+            exp = t.get("expires_at")
+            if exp and exp > now:
+                continue  #----- token has its own live expiry (honoured in sub mode)
+            uid = t.get("user_id")
+            if not uid:
+                count += 1
+                continue
+            if not self.is_subscription_active(await self.get_user(int(uid))):
+                count += 1
+        return count
+
     async def get_api_token(self, token: str) -> Optional[dict]:
         doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        return convert_objectid_to_str(doc) if doc else None
+
+    #----- The (single) token linked to a given user_id, if any
+    async def get_api_token_by_user(self, user_id: int) -> Optional[dict]:
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
         return convert_objectid_to_str(doc) if doc else None
 
     async def get_all_api_tokens(self) -> List[dict]:
@@ -1981,12 +2115,14 @@ class Database:
         result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
         return result.deleted_count > 0
 
-    async def link_token_user(self, token: str, user_id: int) -> bool:
+    async def link_token_user(self, token: str, user_id: int, name: str = None) -> bool:
         #----- Link an existing token to a Telegram user_id; elevate to admin when
-        #----- the linked user is the configured owner (else demote a stale flag).
+        #----- the linked user is the configured owner. Optionally overwrite the name.
+        update = {"user_id": user_id, "is_admin": self._is_owner(user_id)}
+        if name:
+            update["name"] = name
         result = await self.dbs["tracking"]["api_tokens"].update_one(
-            {"token": token},
-            {"$set": {"user_id": user_id, "is_admin": self._is_owner(user_id)}}
+            {"token": token}, {"$set": update}
         )
         return result.modified_count > 0
 

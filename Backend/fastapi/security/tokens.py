@@ -33,33 +33,36 @@ async def verify_token(token: str):
     except (TypeError, ValueError):
         token_data["is_admin"] = bool(token_data.get("is_admin"))
 
-    #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled)
-    if SettingsManager.current().subscription:
-        user_id = token_data.get("user_id")
-        if not user_id:
-            token_data["subscription_expired"] = True
-            return token_data
-
-        user = await db.get_user(int(user_id))
-        if not user or user.get("subscription_status") != "active":
-            token_data["subscription_expired"] = True
-            return token_data
-
-        expiry = user.get("subscription_expiry")
-        if not expiry:
-            token_data["subscription_expired"] = True
-            return token_data
+    #----- Access expiry checks. Admin and never-expires tokens always bypass.
+    if not token_data["is_admin"] and not token_data.get("subscription_exempt"):
 
         #----- Compare correctly regardless of timezone awareness
-        now = datetime.utcnow()
-        try:
-            if expiry.tzinfo is not None:
-                now = datetime.now(timezone.utc)
-        except AttributeError:
-            pass
-        if expiry < now:
-            token_data["subscription_expired"] = True
-            return token_data
+        def _expired(when):
+            ref = datetime.utcnow()
+            try:
+                if when.tzinfo is not None:
+                    ref = datetime.now(timezone.utc)
+            except AttributeError:
+                pass
+            return when < ref
+
+        #----- A token's own expiry is enforced in every mode. With no token expiry,
+        #----- an active subscription is required only while subscription mode is on.
+        #----- (When valid, fall through so data-limit checks still apply.)
+        token_expiry = token_data.get("expires_at")
+        if token_expiry is not None:
+            if _expired(token_expiry):
+                token_data["subscription_expired"] = True
+                return token_data
+        elif SettingsManager.current().subscription:
+            user_id = token_data.get("user_id")
+            user = await db.get_user(int(user_id)) if user_id else None
+            expiry = user.get("subscription_expiry") if user else None
+            if (not user_id or not user
+                    or user.get("subscription_status") != "active"
+                    or not expiry or _expired(expiry)):
+                token_data["subscription_expired"] = True
+                return token_data
 
     if daily_limit := limits.get("daily_limit_gb"):
         if daily_limit > 0:
