@@ -166,6 +166,10 @@ def get_readable_time(seconds: int) -> str:
     return readable_time
 
 
+def trim_after_extension(text: str) -> str:
+    return re.sub(r"(\.(?:mkv|mp4)).*", r"\1", text, flags=re.IGNORECASE | re.DOTALL)
+
+
 #----- Build the display filename stored for a media entry: drop URLs, emoji and
 #----- decorative symbols, strip the split-part suffix (.001), and force a video extension.
 def finalize_media_name(title: str, is_split: bool = False) -> str:
@@ -173,6 +177,8 @@ def finalize_media_name(title: str, is_split: bool = False) -> str:
     title = re.sub(r"\s+", " ", title).strip().replace(" .", ".")
     if is_split:
         title = strip_part_suffix(title)
+    else:
+        title = trim_after_extension(title)
     if not title.endswith((".mkv", ".mp4")):
         title += ".mkv"
     return title
@@ -212,13 +218,11 @@ async def restart_notification():
         LOGGER.error(f"Error in restart_notification: {e}")
 
 
-#----- Bot commands
+#----- Bot commands (stats, log and restart moved to the web app)
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
-    BotCommand("stats", "📊 DB and system stats"),
-    BotCommand("log", "📄 Send the log file"),
-    BotCommand("restart", "♻️ Restart the bot"),
+    BotCommand("scrape", "👾 Scrape direct links from GDFlix, HubCloud."),
 ]
 
 

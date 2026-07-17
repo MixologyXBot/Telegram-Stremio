@@ -13,7 +13,7 @@ from Backend.helper.metadata import extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import parse_split_info
-from Backend.helper.task_manager import edit_message
+from Backend.helper.task_manager import edit_message, delete_message
 from Backend.logger import LOGGER
 
 file_queue = Queue()
@@ -57,6 +57,12 @@ def _finalize_title(title: str, metadata_info: dict) -> str:
 async def process_file():
     while True:
         metadata_info, channel, msg_id, size, raw_size, title = await file_queue.get()
+        if metadata_info.get('quality') == '480p':
+            log_msg = f"{metadata_info.get('title')} S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}" if metadata_info.get('season_number') else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+            await delete_message(int(f"-100{channel}"), msg_id)
+            LOGGER.info(f"Skipping 480p file & Deleted for: {log_msg}")
+            file_queue.task_done()
+            continue
         async with db_lock:
             updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, raw_size=raw_size, name=title)
             if updated_id:
@@ -97,8 +103,8 @@ async def file_receive_handler(client: Client, message: Message):
 
         title = _finalize_title(title, metadata_info)
 
-        if Backend.USE_DEFAULT_ID:
-            new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
+        if Backend.USE_DEFAULT_ID or title != message.caption:
+            new_caption = (title + "\n\n" + Backend.USE_DEFAULT_ID) if Backend.USE_DEFAULT_ID else title
             create_task(edit_message(chat_id=message.chat.id, msg_id=message.id, new_caption=new_caption))
 
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))

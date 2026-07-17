@@ -14,8 +14,8 @@ _DEFAULTS: Dict[str, Any] = {
     "auth_channels": [],
     "tmdb_api": "",
     "base_url": "",
-    "upstream_repo": "",
-    "upstream_branch": "",
+    "upstream_repo": "https://github.com/MixologyXBot/Telegram-Stremio",
+    "upstream_branch": "master",
     "admin_username": "admin",
     "admin_password": "admin",
     "session_secret": "",
@@ -26,6 +26,7 @@ _DEFAULTS: Dict[str, Any] = {
     "payment_qr_url": "",
     "http_proxy_url": "",
     "show_proxy_and_non_proxy_both": False,
+    "scrape_api": "",
     "multi_tokens": [],
     "extra_databases": [],
     "global_search": False,
@@ -107,6 +108,10 @@ class Settings:
     @property
     def tmdb_api(self) -> str:
         return str(self._d.get("tmdb_api") or "")
+
+    @property
+    def scrape_api(self) -> str:
+        return str(self._d.get("scrape_api") or "").rstrip("/")
 
     @property
     def base_url(self) -> str:

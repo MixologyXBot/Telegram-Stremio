@@ -9,8 +9,9 @@ from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 from Backend.logger import LOGGER
 from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata
-from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
+from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls, trim_after_extension
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.helper.task_manager import edit_message, delete_message
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -468,8 +469,20 @@ class ScanManager:
         title_clean = remove_urls(title)
         if metadata_info.get('group_key'):
             title_clean = strip_part_suffix(title_clean)
+        else:
+            title_clean = trim_after_extension(title_clean)
         if not title_clean.endswith(('.mkv', '.mp4')):
             title_clean += '.mkv'
+
+        if title_clean != message.caption:
+            log_msg = f"{metadata_info.get('title')} S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}" if metadata_info.get('season_number') else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+            asyncio.create_task(edit_message(chat_id=message.chat.id, msg_id=message.id, new_caption=title_clean))
+
+        if metadata_info.get('quality') == '480p':
+            log_msg = f"{metadata_info.get('title')} S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}" if metadata_info.get('season_number') else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+            await delete_message(chat_id, msg_id)
+            LOGGER.info(f"Skipping 480p file & Deleted for: {log_msg}")
+            return
 
         try:
             async with self._db_lock:
