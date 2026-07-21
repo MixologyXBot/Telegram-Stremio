@@ -14,12 +14,12 @@ from Backend.helper.encrypt import encode_string
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import extract_default_id, metadata
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, get_log_msg
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
-from Backend.helper.task_manager import delete_message
+from Backend.helper.task_manager import edit_message, delete_message
 from Backend.logger import LOGGER
 
 file_queue = Queue()
@@ -64,6 +64,11 @@ def _finalize_title(title: str, metadata_info: dict) -> str:
 async def process_file():
     while True:
         metadata_info, channel, msg_id, size, raw_size, title = await file_queue.get()
+        if metadata_info.get('quality') == '480p':
+            await delete_message(int(f"-100{channel}"), msg_id)
+            LOGGER.info(f"Skipping 480p file & Deleted for: {get_log_msg(metadata_info)}")
+            file_queue.task_done()
+            continue
         insert_status: dict = {}
         async with db_lock:
             updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, raw_size=raw_size, name=title, status=insert_status)
@@ -240,6 +245,9 @@ async def file_receive_handler(client: Client, message: Message):
             return
 
         title = _finalize_title(title, metadata_info)
+        if not title == message.caption and not metadata_info.get('group_key'):
+            LOGGER.info(f"Editing Caption for Message ID {message.id}: {get_log_msg(metadata_info)}")
+            create_task(edit_message(chat_id=message.chat.id, msg_id=message.id, new_caption=title))
 
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
 

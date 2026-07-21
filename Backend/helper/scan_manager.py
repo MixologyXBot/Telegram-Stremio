@@ -9,10 +9,11 @@ from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 from Backend.logger import LOGGER
 from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata, extract_default_id
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, get_log_msg
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
+from Backend.helper.task_manager import edit_message, delete_message
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -493,6 +494,14 @@ class ScanManager:
             return
 
         title_clean = finalize_media_name(title, bool(metadata_info.get('group_key')))
+        if not title_clean == message.caption and not metadata_info.get('group_key'):
+            LOGGER.info(f"Editing Caption for Message ID {message.id}: {get_log_msg(metadata_info)}")
+            asyncio.create_task(edit_message(chat_id=chat_id, msg_id=message.id, new_caption=title_clean))
+
+        if metadata_info.get('quality') == '480p':
+            await delete_message(chat_id, msg_id)
+            LOGGER.info(f"Skipping 480p file & Deleted for: {get_log_msg(metadata_info)}")
+            return
 
         insert_status: dict = {}
         try:
