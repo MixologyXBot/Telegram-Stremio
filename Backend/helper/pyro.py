@@ -166,6 +166,15 @@ def get_readable_time(seconds: int) -> str:
     return readable_time
 
 
+def get_log_msg(metadata_info: dict) -> str:
+    return (
+        f"{metadata_info.get('title')} "
+        f"S{metadata_info.get('season_number')}E{metadata_info.get('episode_number')}"
+        if metadata_info.get('season_number')
+        else f"{metadata_info.get('title')} ({metadata_info.get('year')})"
+    )
+
+
 #----- Build the display filename stored for a media entry: drop URLs, emoji and
 #----- decorative symbols, strip the split-part suffix (.001), and force a video extension.
 def finalize_media_name(title: str, is_split: bool = False) -> str:
@@ -225,6 +234,7 @@ async def restart_notification():
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
+    BotCommand("scrape", "👾 Scrape direct links from GDFlix, HubCloud."),
 ]
 
 

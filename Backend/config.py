@@ -32,6 +32,7 @@ class Telegram:
     AUTH_CHANNEL                  = [c.strip() for c in (getenv("AUTH_CHANNEL") or "").split(",") if c.strip()]
     TMDB_API                      = getenv("TMDB_API", "")
     TVDB_API                       = getenv("TVDB_API", "")
+    SCRAPE_API                    = getenv("SCRAPE_API", "").rstrip("/")
     BASE_URL                      = getenv("BASE_URL", "").rstrip("/")
     UPSTREAM_REPO                 = getenv("UPSTREAM_REPO", "")
     UPSTREAM_BRANCH               = getenv("UPSTREAM_BRANCH", "")
