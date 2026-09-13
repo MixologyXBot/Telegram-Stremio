@@ -3,7 +3,7 @@ import logging
 import secrets
 from traceback import format_exc
 
-from pyrogram import idle
+from wzgram import idle
 from starlette.middleware.sessions import SessionMiddleware
 
 from Backend import __version__, db
@@ -17,9 +17,9 @@ from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan
 from Backend.helper.session_auth import get_active_session_string
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
-import Backend.pyrofork.bot as botmod
-from Backend.pyrofork.bot import StreamBot
-from Backend.pyrofork.clients import initialize_clients
+import Backend.telegram.bot as botmod
+from Backend.telegram.bot import StreamBot
+from Backend.telegram.clients import initialize_clients
 
 loop = asyncio.get_event_loop()
 
