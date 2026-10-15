@@ -1939,7 +1939,7 @@ async def update_settings_api(payload: dict) -> dict:
                     )
 
     #----- Strip whitespace from string fields
-    for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
+    for key in ("tmdb_api", "scrape_api", "scrape_api_key", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "cf_stream_url", "cf_stream_secret", "cf_stream_mode",
                 "mediaflow_password", "payment_instructions", "payment_qr_url",
