@@ -4,11 +4,10 @@ guessit
 httpx
 motor
 parse-torrent-title
-pyrofork
+git+https://github.com/rjriajul/wzgram
 rapidfuzz
 python-dotenv
 pytz
-tgcrypto
 themoviedb
 uvicorn
 uv
