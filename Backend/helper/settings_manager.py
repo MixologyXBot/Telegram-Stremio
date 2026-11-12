@@ -16,6 +16,8 @@ _DEFAULTS: Dict[str, Any] = {
     "auth_channels": [],
     "tmdb_api": "",
     "tvdb_api": "",
+    "scrape_api": "",
+    "scrape_api_key": "",
     "base_url": "",
     "upstream_repo": "https://github.com/weebzone/Telegram-Stremio",
     "upstream_branch": "master",
@@ -74,6 +76,8 @@ def _seed_from_env() -> Dict[str, Any]:
         "auth_channels":                list(Telegram.AUTH_CHANNEL),
         "tmdb_api":                     Telegram.TMDB_API,
         "tvdb_api":                     getattr(Telegram, "TVDB_API", "") or "",
+        "scrape_api":                   Telegram.SCRAPE_API,
+        "scrape_api_key":               getattr(Telegram, "SCRAPE_API_KEY", "") or "",
         "base_url":                     Telegram.BASE_URL,
         "upstream_repo":                Telegram.UPSTREAM_REPO,
         "upstream_branch":              Telegram.UPSTREAM_BRANCH,
@@ -177,6 +181,14 @@ class Settings:
     @property
     def tvdb_api(self) -> str:
         return str(self._d.get("tvdb_api") or "").strip()
+
+    @property
+    def scrape_api(self) -> str:
+        return str(self._d.get("scrape_api") or "").rstrip("/")
+
+    @property
+    def scrape_api_key(self) -> str:
+        return str(self._d.get("scrape_api_key") or "").strip()
 
     @property
     def base_url(self) -> str:
