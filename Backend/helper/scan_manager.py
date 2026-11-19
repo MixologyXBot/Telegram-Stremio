@@ -10,10 +10,11 @@ from Backend.logger import LOGGER
 from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.manual_add import stamp_caption_with_id
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
-from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, get_log_msg
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
+from Backend.helper.task_manager import edit_message, delete_message
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -494,6 +495,18 @@ class ScanManager:
             return
 
         title_clean = finalize_media_name(title, bool(metadata_info.get('group_key')))
+        if title_clean != (message.caption or "") and not metadata_info.get("group_key"):
+            LOGGER.info(f"Editing Caption for Message ID {message.id}: {get_log_msg(metadata_info)}")
+            asyncio.create_task(edit_message(chat_id=chat_id, msg_id=msg_id, new_caption=title_clean))
+
+        if metadata_info.get("quality") == "480p":
+            try:
+                await delete_message(chat_id, msg_id)
+                LOGGER.info(f"Skipping 480p file & Deleted for: {get_log_msg(metadata_info)}")
+            except Exception as error:
+                LOGGER.error(f"Failed to delete 480p file {msg_id} in {chat_id}: {error}")
+            return
+
         encoded = metadata_info.get("encoded_string") or await encode_string({"chat_id": channel_int, "msg_id": msg_id})
         await apply_video_thumb_to_metadata(metadata_info, message, encoded, client)
 
